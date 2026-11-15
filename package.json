@@ -1,0 +1,40 @@
+{
+  "name": "lasercat",
+  "private": true,
+  "version": "1.0.0",
+  "author": "Daniel Hernández Ferrándiz",
+  "description": "LaserCat — taller de corte y grabado láser en el navegador",
+  "homepage": "https://dhernandezgit.github.io/LaserCat/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dhernandezgit/LaserCat.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "clipper-lib": "^6.4.2",
+    "fflate": "^0.8.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^16.0.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^24.1.3",
+    "playwright-core": "^1.65.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
+  }
+}

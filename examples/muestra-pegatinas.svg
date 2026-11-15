@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="180mm" height="120mm" viewBox="0 0 180 120">
+  <g id="gato" inkscape:label="Gato">
+    <path d="M12 30 L12 10 L26 20 C32 17 42 17 48 20 L62 10 L62 30 C70 38 70 54 58 62 C48 69 26 69 16 62 C4 54 4 38 12 30 Z" fill="#000"/>
+    <circle cx="30" cy="38" r="5" fill="#fff"/>
+    <circle cx="46" cy="38" r="5" fill="#fff"/>
+  </g>
+  <g id="estrella" inkscape:label="Estrella">
+    <path d="M96 8 L102 26 L121 27 L106 39 L111 57 L96 46 L81 57 L86 39 L71 27 L90 26 Z" fill="#000"/>
+  </g>
+  <g id="luna" inkscape:label="Luna">
+    <circle cx="151" cy="34" r="24" fill="#000"/>
+    <circle cx="159" cy="30" r="16" fill="#fff"/>
+  </g>
+  <g id="hex" inkscape:label="Hexágono">
+    <path d="M25 72 L53 72 L67 92 L53 112 L25 112 L11 92 Z" fill="#000"/>
+    <path d="M35 82 L43 82 L47 92 L43 102 L35 102 L31 92 Z" fill="#fff"/>
+  </g>
+  <g id="marco" inkscape:label="Marco">
+    <rect x="90" y="78" width="80" height="30" rx="4" fill="none" stroke="#000" stroke-width="2"/>
+  </g>
+</svg>
