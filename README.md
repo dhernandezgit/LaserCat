@@ -4,6 +4,10 @@
 <img src="public/icon.svg" width="96" alt="LaserCat" />
 
 **Corte y grabado láser, sin pelearte con la plancha.**
+
+[![Deploy](https://github.com/dhernandezgit/LaserCat/actions/workflows/pages.yml/badge.svg)](https://github.com/dhernandezgit/LaserCat/actions/workflows/pages.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-8a5a2b.svg)](LICENSE)
+[![LightBurn ready](https://img.shields.io/badge/LightBurn-SVG%20mm-000000.svg)](https://docs.lightburnsoftware.com/)
 </div>
 
 LaserCat es un taller local-first para preparar trabajos de láser: importa tus SVG e imágenes,
