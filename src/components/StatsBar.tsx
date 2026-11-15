@@ -36,11 +36,11 @@ export function StatsBar({
           <span>Tiempo</span>
           <b>{formatDuration(stats.timeSeconds)}</b>
         </div>
-        <div className="stat hide-sm">
+        <div className="stat hide-sm secondary">
           <span>Corte</span>
           <b>{(stats.cutLength / 1000).toFixed(2)} m</b>
         </div>
-        <div className="stat hide-sm">
+        <div className="stat hide-sm secondary">
           <span>Grabado</span>
           <b>{(stats.engraveArea / 10000).toFixed(2)} dm²</b>
         </div>
