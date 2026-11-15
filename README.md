@@ -225,7 +225,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 54 tests (geometría, importador, nesting, export, store, tarjeta)
+npm test           # 53 tests (geometría, importador, nesting, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estático
 npm run preview

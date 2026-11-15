@@ -158,12 +158,16 @@ export function ImageImportDialog({
           if (cancelled) return;
           const normalized = normalizeOrigin(dots);
           const b = contoursBounds(normalized);
+          // Con miles de puntos, dibujar el SVG en el navegador puede congelar
+          // la vista previa: mostramos la imagen original y el número de puntos.
+          const heavy = dots.length > 5000;
           setPreview({
             kind: "vector",
             contours: normalized,
-            svgPath: normalized
-              .map((c) => `M${c.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join("L")}Z`)
-              .join(""),
+            svgPath: heavy
+              ? undefined
+              : normalized.map((c) => `M${c.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join("L")}Z`).join(""),
+            dataUrl: heavy ? imageDataToDataUrl(image) : undefined,
             width: b.w,
             height: b.h,
             dots: dots.length,

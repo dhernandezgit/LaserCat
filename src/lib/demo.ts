@@ -19,7 +19,7 @@ export function uid(prefix = "id"): string {
 }
 
 function normalizePart(contours: Contour[]): { contours: Contour[]; width: number; height: number } {
-  const clean = normalizeOrientation(cleanContours(contours, "nonzero"));
+  const clean = normalizeOrientation(cleanContours(contours, "evenodd"));
   const b = contoursBounds(clean);
   const shifted = translateContours(clean, -b.x, -b.y);
   return { contours: shifted, width: b.w, height: b.h };
@@ -111,7 +111,9 @@ function makePart(
 /** Devuelve las piezas de la plancha de bienvenida. */
 export function demoParts(): Part[] {
   const cat = catSilhouette();
-  const catPart = makePart("Pegatina gatito", [cat], "cut", 2.5, 3, "#b5651d");
+  const eyeL = circleContour(-13, 2, 4.5, 32).slice().reverse();
+  const eyeR = circleContour(13, 2, 4.5, 32).slice().reverse();
+  const catPart = makePart("Pegatina gatito", [cat, eyeL, eyeR], "cut", 2.5, 3, "#b5651d");
 
   const tag = roundedRect(58, 24, 5);
   const tagHole = circleContour(8, 12, 2.4, 32);

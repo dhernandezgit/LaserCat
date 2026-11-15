@@ -64,11 +64,12 @@ describe("offset", () => {
 
   it("effective geometry shifts the design inside the border", () => {
     const part = demoParts()[0];
+    expect(part.contours.length).toBe(3); // gato + dos ojos
     const g = effectiveGeometry(part);
     expect(g.hasOffset).toBe(true);
     expect(g.width).toBeGreaterThan(part.width);
     expect(g.baseBounds.x).toBeCloseTo(part.offsetMm, 0);
-    expect(g.outer.length).toBe(1);
+    expect(g.outer.length).toBe(3);
   });
 
   it("keeps hole size when expanding a sticker border", () => {

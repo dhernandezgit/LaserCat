@@ -25,21 +25,21 @@ export function PartThumb({ part, size = 46 }: { part: Part; size?: number }) {
   const dOuter = contoursToPath(all);
   const dBase = contoursToPath(g.base);
   const fill =
-    part.operation === "engrave" ? "var(--ink)" : part.operation === "score" ? "none" : "var(--wood-3)";
-  const stroke = part.operation === "engrave" ? "var(--ink)" : "var(--wood-6)";
+    part.operation === "engrave" ? "rgba(72,43,20,.78)" : part.operation === "score" ? "none" : "rgba(176,120,60,.38)";
+  const stroke = part.operation === "engrave" ? "var(--ink)" : "#5a3a1c";
   return (
     <div className="part-thumb" style={{ width: size, height: size }}>
       <svg viewBox={`${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`} width="100%" height="100%">
         {g.hasOffset && (
-          <path d={dOuter} fill="rgba(140,90,40,.10)" stroke="var(--wood-4)" strokeWidth={0.3} strokeDasharray="1 0.8" />
+          <path d={dOuter} fill="rgba(140,90,40,.07)" stroke="var(--wood-4)" strokeWidth={0.4} strokeDasharray="1 0.8" />
         )}
         <path
           d={dBase}
-          fill={g.hasOffset ? "none" : fill}
+          fill={fill}
           stroke={stroke}
-          strokeWidth={0.35}
+          strokeWidth={0.55}
           fillRule="evenodd"
-          opacity={part.operation === "score" ? 0.85 : 1}
+          opacity={part.operation === "score" ? 0.9 : 0.88}
         />
       </svg>
     </div>

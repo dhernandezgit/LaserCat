@@ -33,7 +33,7 @@ export function StatsBar({
           </div>
         </div>
         <div className="stat">
-          <span>Tiempo est.</span>
+          <span>Tiempo</span>
           <b>{formatDuration(stats.timeSeconds)}</b>
         </div>
         <div className="stat hide-sm">
