@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Doc } from "../types";
 import { laserPresetFor, MACHINE_BY_ID, MATERIAL_BY_ID, MATERIALS } from "../lib/laser";
 import { Badge, Icon, Modal } from "./UI";
@@ -13,8 +13,11 @@ const SECTIONS = [
   { id: "creditos", label: "Créditos" },
 ] as const;
 
-export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; onClose: () => void }) {
-  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("inicio");
+export function HelpDialog({ open, doc, onClose, initialSection = "inicio" }: { open: boolean; doc: Doc; onClose: () => void; initialSection?: (typeof SECTIONS)[number]["id"] }) {
+  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>(initialSection);
+  useEffect(() => {
+    if (open) setSection(initialSection);
+  }, [open, initialSection]);
   const material = MATERIAL_BY_ID[doc.settings.materialId] || MATERIAL_BY_ID.tilo;
   const machine = MACHINE_BY_ID[doc.settings.machineId] || MACHINE_BY_ID.s30;
   const cut = laserPresetFor(material.id, "cut", machine.id);
@@ -53,7 +56,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
               </div>
               <div className="help-note">
                 <Icon name="info" size={16} />
-                <p>La plancha inicial es de 300×300 mm con 5 mm de margen. Se puede cambiar en <b>Plancha</b>. El tema <b>Eevee</b> es el predeterminado; cámbialo con el pincel de la cabecera.</p>
+                <p>La plancha inicial es de 300×300 mm con 5 mm de margen. Se puede cambiar en <b>Plancha</b>. El tema <b>Eevee</b> es el predeterminado; cámbialo con el badge de <b>Ajustes → Vista y tema</b>.</p>
               </div>
             </>
           )}
@@ -61,7 +64,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
           {section === "svg" && (
             <>
               <h2>Importar un SVG sin perder la cabeza</h2>
-              <p>El importador separa primero cada forma en <b>islas</b>: un contorno exterior con sus agujeros. Después las agrupa por cercanía y por los grupos del archivo original.</p>
+              <p>Arrastra un SVG a la columna <b>Piezas</b> y se añade y coloca solo. El importador separa cada forma en <b>islas</b> (contorno exterior + agujeros) y las agrupa por cercanía, por las imágenes grandes y por los grupos del archivo original. Si quieres revisar escala, grupos y operaciones antes de añadir, pulsa <b>Revisar SVG</b>.</p>
               <div className="help-note">
                 <Icon name="image" size={16} />
                 <p><b>SVG con imágenes:</b> si el SVG lleva las imágenes <b>incrustadas</b> (data URL), se importan como grabado y la imagen grande se convierte en el ancla de una <b>figura</b>. Sus cortes, ranuras y puertas se agrupan a su alrededor. Las imágenes enlazadas desde fuera no se pueden leer.</p>
@@ -95,7 +98,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
               </div>
               <p className="micro-help">Los ajustes manuales se conservan mientras el número de piezas no cambie; si cambias la escala o el modo de agrupación, se recalcula la separación.</p>
               <h3>Guardar una figura con sus imágenes</h3>
-              <p>En la tarjeta de una figura pulsa el <b>disquete</b>, o en el inspector usa <b>Guardar «nombre»</b>. Se guarda en la <b>Biblioteca de figuras</b> y descarga un <code>.lasercat-group.json</code> con las imágenes dentro. <b>Exportar figura para LightBurn (ZIP)</b> genera un SVG por capas con las imágenes incrustadas, los PNG, el CSV y el LEEME.</p>
+              <p>En la tarjeta de una figura pulsa el <b>disquete</b> para guardarla con su nombre y sus imágenes. Se guarda en la <b>Biblioteca de figuras</b> y descarga un <code>.lasercat-group.json</code> con las imágenes dentro. <b>Exportar figura para LightBurn (ZIP)</b> genera un SVG por capas con las imágenes incrustadas, los PNG, el CSV y el LEEME.</p>
             </>
           )}
 
@@ -105,7 +108,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
               <p>El <b>borde</b> (offset) expande el contorno alrededor del diseño. Se calcula sobre la forma final, con agujeros y todo.</p>
               <ol className="help-list">
                 <li>Importa el diseño y ponlo en <b>Grabar</b> si quieres el dibujo quemado.</li>
-                <li>En el inspector, sube el <b>borde</b> a 2–3 mm.</li>
+                <li>En la tarjeta de la pieza, despliega <b>Borde adicional</b> y súbelo a 2–3 mm.</li>
                 <li>LaserCat graba el diseño y corta el contorno exterior del borde.</li>
                 <li>Si quieres una pegatina de dos capas, activa <b>Cortar también el diseño interior</b>.</li>
               </ol>

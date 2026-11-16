@@ -12,6 +12,7 @@ import type {
   Placement,
   Quality,
   RotationMode,
+  PlacementMethod,
 } from "../types";
 import { clipperArea } from "./clipper";
 import { contoursBounds, rotateContours, translateContours } from "./geom";
@@ -467,11 +468,18 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   }
 
   let bestRun: RunResult | null = null;
+  const method = options.method ?? "auto";
   const runs = QUALITY_RUNS[options.quality];
   const rand = mulberry32(0x1a5e4ca7);
   for (let run = 0; run < runs; run++) {
     if (run > 0 && Date.now() > budgetEnd) break;
-    const ordered = ordering(instances, run, rand);
+    const ordered = method === "greedy"
+      ? ordering(instances, 0, rand)
+      : method === "largest"
+        ? ordering(instances, 1, rand)
+        : method === "voronoi"
+          ? ordering(instances, 2 + (run % 3), rand)
+          : ordering(instances, run, rand);
     const res = placeRun(
       ordered,
       rotationCache,
@@ -481,7 +489,7 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       sheetsAllowed,
       pinned,
       pinnedArea,
-      options.quality !== "rapida" && pinned.length === 0,
+      options.compact !== false && options.quality !== "rapida" && pinned.length === 0,
       budgetEnd,
     );
     if (!bestRun || res.score < bestRun.score) bestRun = res;

@@ -60,6 +60,18 @@ describe("store", () => {
     expect(state.past.length).toBe(1);
   });
 
+  it("quita la demo al añadir material propio", () => {
+    let state = createInitialState();
+    expect(state.doc.parts.some((p) => p.source === "demo")).toBe(true);
+    state = reducer(state, {
+      type: "ADD_PARTS",
+      parts: [basePart({ id: "real", source: "svg" })],
+      nest: false,
+    });
+    expect(state.doc.parts.some((p) => p.source === "demo")).toBe(false);
+    expect(state.doc.parts.some((p) => p.id === "real")).toBe(true);
+  });
+
   it("undoes and redoes", () => {
     let state = emptyState();
     state = reducer(state, { type: "ADD_PARTS", parts: [basePart()] });

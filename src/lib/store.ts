@@ -12,7 +12,7 @@ import type {
   Sheet,
 } from "../types";
 import { demoParts } from "./demo";
-import { rotatedSize, rotatePt } from "./geom";
+import { rotatedSize, rotatePt, rectContour } from "./geom";
 import { effectiveGeometry } from "./laser";
 import { nestParts } from "./nest";
 import type { NestResult } from "../types";
@@ -28,6 +28,8 @@ export const DEFAULT_SHEET: Sheet = {
   kerf: 0.15,
   rotation: "90",
   quality: "maxima",
+  method: "auto",
+  packMode: "shape",
   singlePage: false,
 };
 
@@ -36,6 +38,9 @@ export const DEFAULT_SETTINGS: DocSettings = {
   materialId: "tilo",
   expert: false,
   autoNest: true,
+  imageDropMode: "cut",
+  compact: true,
+  miniScale: 0.5,
   exportBridges: false,
   bridgeCount: 4,
   bridgeWidth: 2.5,
@@ -88,8 +93,10 @@ export interface AppState {
 
 export type Action =
   | { type: "ADD_PARTS"; parts: Part[]; groups?: Assembly[]; nest?: boolean }
+  | { type: "SET_ALL_OFFSET"; value: number; nest?: boolean }
   | { type: "UPDATE_PART"; id: string; patch: Partial<Part>; nest?: boolean; key?: string }
   | { type: "RESIZE_PART"; id: string; width: number; height: number; nest?: boolean }
+  | { type: "RESIZE_ASSEMBLY"; id: string; width: number; height: number; nest?: boolean }
   | { type: "REMOVE_PARTS"; ids: string[] }
   | { type: "SET_COPIES"; id: string; copies: number }
   | { type: "NEST" }
@@ -156,6 +163,8 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
   }
 
   const request: NestRequestPart[] = [];
+  const boxMode = doc.sheet.packMode === "box";
+  const boxFor = (w: number, h: number) => [rectContour(0, 0, Math.max(0.1, w), Math.max(0.1, h))];
   // Piezas reales con copies 0: sirven para que el packer encuentre las fijadas.
   for (const part of doc.parts) {
     const grouped = groupedPartIds.has(part.id);
@@ -164,7 +173,7 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
     request.push({
       partId: part.id,
       copies: grouped ? 0 : Math.max(0, part.copies - already),
-      contours: g.outer,
+      contours: boxMode ? boxFor(g.width, g.height) : g.outer,
       width: g.width,
       height: g.height,
       raster: part.kind === "raster",
@@ -181,7 +190,7 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
     request.push({
       partId: `asm:${group.id}`,
       copies: Math.max(0, group.copies - already),
-      contours: geo.contours,
+      contours: boxMode ? boxFor(geo.width, geo.height) : geo.contours,
       width: geo.width,
       height: geo.height,
     });
@@ -193,6 +202,9 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
       sheet: doc.sheet,
       rotation: doc.sheet.rotation,
       quality: doc.sheet.quality,
+      method: doc.sheet.method,
+      packMode: doc.sheet.packMode,
+      compact: doc.settings.compact !== false,
       pinned,
     });
   } catch (err) {
@@ -416,10 +428,21 @@ export function reducer(state: AppState, action: Action): AppState {
         const g = groupOf.get(p.id);
         return g ? { ...p, assemblyId: g.id, copies: 1 } : p;
       });
+      // Como en CryCat: las figuras de ejemplo desaparecen al añadir material propio.
+      const addingReal = action.parts.some((p) => p.source === "svg" || p.source === "image");
+      const demoIds = addingReal
+        ? new Set(state.doc.parts.filter((p) => p.source === "demo").map((p) => p.id))
+        : new Set<string>();
+      const baseParts = demoIds.size ? state.doc.parts.filter((p) => !demoIds.has(p.id)) : state.doc.parts;
+      const basePlacements = demoIds.size ? state.doc.placements.filter((p) => !demoIds.has(p.partId)) : state.doc.placements;
+      const baseGroups = demoIds.size
+        ? getGroups(state.doc).filter((g) => !g.members.some((m) => demoIds.has(m.partId)))
+        : getGroups(state.doc);
       let doc: Doc = {
         ...state.doc,
-        parts: [...state.doc.parts, ...parts],
-        groups: [...getGroups(state.doc), ...incomingGroups.map((g) => ({
+        parts: [...baseParts, ...parts],
+        placements: basePlacements,
+        groups: [...baseGroups, ...incomingGroups.map((g) => ({
           ...g,
           members: normalizeMembers(g.members, parts),
           copies: Math.max(1, g.copies || 1),
@@ -432,12 +455,46 @@ export function reducer(state: AppState, action: Action): AppState {
       const doc = { ...state.doc, parts: [...state.doc.parts, action.shape] };
       return autoNestOrKeep(state, doc, "add-shape");
     }
+    case "SET_ALL_OFFSET": {
+      const value = Math.max(0, Math.min(20, Math.round(action.value * 2) / 2));
+      const parts = state.doc.parts.map((p) => ({ ...p, offsetMm: value }));
+      const doc = { ...state.doc, parts };
+      return action.nest === false
+        ? withDoc(state, doc, "all-offset")
+        : autoNestOrKeep(state, doc, "all-offset");
+    }
     case "UPDATE_PART": {
       const parts = state.doc.parts.map((p) => (p.id === action.id ? { ...p, ...action.patch } : p));
       const doc = { ...state.doc, parts };
       return action.nest
         ? autoNestOrKeep(state, doc, action.key || `part-${action.id}`)
         : withDoc(state, doc, action.key || `part-${action.id}`);
+    }
+    case "RESIZE_ASSEMBLY": {
+      const group = getGroups(state.doc).find((g) => g.id === action.id);
+      if (!group) return state;
+      const members = new Set(group.members.map((m) => m.partId));
+      const geo = assemblyGeometry(group, state.doc.parts);
+      if (!geo.width || !geo.height) return state;
+      const sx = Math.max(0.1, action.width) / geo.width;
+      const sy = Math.max(0.1, action.height) / geo.height;
+      const parts = state.doc.parts.map((p) => {
+        if (!members.has(p.id)) return p;
+        return {
+          ...p,
+          width: Math.max(0.1, p.width * sx),
+          height: Math.max(0.1, p.height * sy),
+          contours: p.contours.map((c) => c.map((pt) => ({ x: pt.x * sx, y: pt.y * sy }))),
+          raster: p.raster ? { ...p.raster, dpi: p.raster.dpi / Math.max(0.01, (sx + sy) / 2) } : undefined,
+        };
+      });
+      const groups = getGroups(state.doc).map((g) =>
+        g.id === action.id
+          ? { ...g, members: g.members.map((m) => ({ ...m, dx: m.dx * sx, dy: m.dy * sy })) }
+          : g,
+      );
+      const doc = { ...state.doc, parts, groups };
+      return action.nest === false ? withDoc(state, doc, `resize-group-${action.id}`) : autoNestOrKeep(state, doc, `resize-group-${action.id}`);
     }
     case "RESIZE_PART": {
       const parts = state.doc.parts.map((p) => {
@@ -478,14 +535,16 @@ export function reducer(state: AppState, action: Action): AppState {
         const groups = getGroups(state.doc).map((g) =>
           g.id === part.assemblyId ? { ...g, copies: Math.max(0, copies) } : g,
         );
+        if (!state.doc.settings.autoNest) {
+          return withDoc(state, { ...state.doc, groups }, `copies-${part.assemblyId}`);
+        }
         const res = nestDoc({ ...state.doc, groups });
         const next = withDoc(state, res.doc, `copies-${part.assemblyId}`);
         return { ...next, lastNest: res.nest };
       }
       const parts = state.doc.parts.map((p) => (p.id === action.id ? { ...p, copies } : p));
       const doc = { ...state.doc, parts };
-      // Cambiar el número de copias siempre recoloca: no tiene sentido
-      // dejar copias fantasma cuando el usuario baja el contador.
+      if (!state.doc.settings.autoNest) return withDoc(state, doc, `copies-${action.id}`);
       const res = nestDoc(doc);
       const next = withDoc(state, res.doc, `copies-${action.id}`);
       return { ...next, lastNest: res.nest };
@@ -662,6 +721,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const groups = getGroups(state.doc).map((g) =>
         g.id === action.id ? { ...g, copies: Math.max(0, Math.min(999, Math.round(action.copies))) } : g,
       );
+      if (!state.doc.settings.autoNest) return withDoc(state, { ...state.doc, groups }, `group-copies-${action.id}`);
       const res = nestDoc({ ...state.doc, groups });
       const next = withDoc(state, res.doc, `group-copies-${action.id}`);
       return { ...next, lastNest: res.nest };
@@ -920,6 +980,10 @@ export function normalizeDoc(input: any): Doc | null {
     quality: ["rapida", "equilibrada", "maxima"].includes(input.sheet.quality)
       ? input.sheet.quality
       : "equilibrada",
+    method: ["auto", "greedy", "largest", "voronoi", "genetic"].includes(input.sheet.method)
+      ? input.sheet.method
+      : "auto",
+    packMode: ["shape", "box"].includes(input.sheet.packMode) ? input.sheet.packMode : "shape",
     singlePage: Boolean(input.sheet.singlePage),
   };
   const rs = input.settings || {};

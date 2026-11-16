@@ -11,6 +11,9 @@ export type Operation = "cut" | "engrave" | "score";
 export type SvgFillRule = "nonzero" | "evenodd";
 export type Quality = "rapida" | "equilibrada" | "maxima";
 export type RotationMode = "no" | "90" | "libre";
+export type PlacementMethod = "auto" | "greedy" | "largest" | "voronoi" | "genetic";
+export type PackMode = "shape" | "box";
+export type ImageDropMode = "cut" | "engrave-threshold" | "engrave-gray";
 export type EngraveMode = "threshold" | "grayscale" | "dither";
 
 export interface Bounds {
@@ -97,6 +100,10 @@ export interface Sheet {
   kerf: number;
   rotation: RotationMode;
   quality: Quality;
+  /** Estrategia de colocación. */
+  method?: PlacementMethod;
+  /** Forma real o cajas envolventes. */
+  packMode?: PackMode;
   /** Solo una plancha: avisa si algo no cabe. */
   singlePage: boolean;
 }
@@ -137,6 +144,9 @@ export interface DocSettings {
   expert: boolean;
   /** Recolocar automÃ¡ticamente al importar o cambiar copias. */
   autoNest: boolean;
+  imageDropMode?: ImageDropMode;
+  compact?: boolean;
+  miniScale?: number;
   /** Ajustes de exportaciÃ³n. */
   exportBridges: boolean;
   bridgeCount: number;
@@ -188,6 +198,11 @@ export interface NestOptions {
   sheet: Sheet;
   rotation: RotationMode;
   quality: Quality;
+  /** Estrategia de colocación. */
+  method?: PlacementMethod;
+  /** Forma real o cajas envolventes. */
+  packMode?: PackMode;
+  compact?: boolean;
   /** Marcas de piezas que ya estÃ¡n colocadas y no deben moverse. */
   pinned: Placement[];
 }

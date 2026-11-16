@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { importSvg } from "./svgImport";
+import { partsFromSvgResult } from "./autoImport";
 
 /**
  * Prueba propia y sintética: una imagen PNG incrustada (1×1) y un contorno de
@@ -30,5 +31,11 @@ describe("importSvg con imágenes incrustadas", () => {
     expect(res.parts.some((p) => p.kind === "vector")).toBe(true);
     expect(res.scale).toBeGreaterThan(0);
     expect(Number.isFinite(res.widthMm)).toBe(true);
+
+    const payload = partsFromSvgResult(res);
+    expect(payload.parts).toHaveLength(res.parts.length);
+    expect(payload.groups).toHaveLength(1);
+    expect(payload.groups[0].members).toHaveLength(2);
+    expect(payload.groups[0].members.some((m) => payload.parts.find((p) => p.id === m.partId)?.kind === "raster")).toBe(true);
   });
 });

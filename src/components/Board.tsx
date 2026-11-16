@@ -145,11 +145,17 @@ export function Board({
   };
 
   const endDrag = (e: React.PointerEvent) => {
-    if (!drag.current) return;
+    const d = drag.current;
+    if (!d) return;
     try {
       svgRef.current?.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
+    }
+    if (d.moved) {
+      // La pieza movida a mano se queda fijada; el resto se recoloca alrededor.
+      for (const o of d.origins) dispatch({ type: "PIN_PLACEMENT", id: o.id, pinned: true });
+      if (doc.settings.autoNest) window.setTimeout(() => dispatch({ type: "NEST" }), 30);
     }
     drag.current = null;
     setDragging(false);
@@ -314,6 +320,12 @@ export function Board({
         )}
         {g.hasOffset && part.operation === "engrave" && (
           <path d={dOuter} fill="none" stroke={stroke} strokeWidth={0.38} />
+        )}
+        {pl.pinned && (
+          <g transform={`translate(${g.width - 3.2} 3.2)`}>
+            <circle r={2.5} fill="var(--accent3)" opacity={0.9} />
+            <path d="M-0.7 -1.2 L0.7 -1.2 L0.2 0.6 L0 1.8 L-0.2 0.6 Z" fill="#fff" />
+          </g>
         )}
       </g>
     );
