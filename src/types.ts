@@ -1,4 +1,4 @@
-/** Tipos centrales de LaserCat. Todas las medidas están en milímetros. */
+﻿/** Tipos centrales de LaserCat. Todas las medidas estÃ¡n en milÃ­metros. */
 
 export interface Pt {
   x: number;
@@ -25,11 +25,27 @@ export interface RasterData {
   dataUrl: string;
   width: number;
   height: number;
-  /** Resolución de la imagen, para colocarla a tamaño físico. */
+  /** ResoluciÃ³n de la imagen, para colocarla a tamaÃ±o fÃ­sico. */
   dpi: number;
   mode: EngraveMode;
   threshold: number;
   invert: boolean;
+}
+
+/** Miembro de un ensamblaje: pieza + desplazamiento relativo al grupo. */
+export interface AssemblyMember {
+  partId: string;
+  dx: number;
+  dy: number;
+}
+
+/** Grupo de piezas que se mueve, gira y anida como una sola figura. */
+export interface Assembly {
+  id: string;
+  name: string;
+  members: AssemblyMember[];
+  copies: number;
+  color?: string;
 }
 
 export interface Part {
@@ -48,10 +64,12 @@ export interface Part {
   copies: number;
   source: "svg" | "image" | "demo";
   raster?: RasterData;
-  /** Tinte de identificación en el mapa de piezas. */
+  /** Tinte de identificaciÃ³n en el mapa de piezas. */
   color?: string;
   /** Grupo de origen (para el importador). */
   groupId?: string;
+  /** Ensamblaje al que pertenece la pieza. */
+  assemblyId?: string;
   notes?: string;
   lockedSize?: boolean;
 }
@@ -66,6 +84,8 @@ export interface Placement {
   angle: number;
   mirror: boolean;
   pinned: boolean;
+  /** Ensamblaje al que pertenece esta colocaciÃ³n. */
+  assemblyId?: string;
 }
 
 export interface Sheet {
@@ -73,7 +93,7 @@ export interface Sheet {
   height: number;
   margin: number;
   spacing: number;
-  /** Compensación de kerf total en mm. El corte se desplaza kerf/2. */
+  /** CompensaciÃ³n de kerf total en mm. El corte se desplaza kerf/2. */
   kerf: number;
   rotation: RotationMode;
   quality: Quality;
@@ -87,7 +107,7 @@ export interface LaserPreset {
   power: number;
   speed: number; // mm/min
   passes: number;
-  interval: number; // mm entre líneas de grabado
+  interval: number; // mm entre lÃ­neas de grabado
   airAssist: boolean;
   notes: string;
 }
@@ -115,9 +135,9 @@ export interface DocSettings {
   materialId: string;
   /** Modo simple u holgado para no saturar la interfaz. */
   expert: boolean;
-  /** Recolocar automáticamente al importar o cambiar copias. */
+  /** Recolocar automÃ¡ticamente al importar o cambiar copias. */
   autoNest: boolean;
-  /** Ajustes de exportación. */
+  /** Ajustes de exportaciÃ³n. */
   exportBridges: boolean;
   bridgeCount: number;
   bridgeWidth: number;
@@ -129,6 +149,7 @@ export interface DocSettings {
   engraveOutput: "vector" | "raster";
   ditherDotsPerMm: number;
   previewSpecies: string;
+  previewBurnTone?: string;
   previewPower: number;
   previewSpeed: number;
   previewPasses: number;
@@ -139,6 +160,7 @@ export interface Doc {
   name: string;
   parts: Part[];
   placements: Placement[];
+  groups?: Assembly[];
   sheet: Sheet;
   settings: DocSettings;
   createdAt: number;
@@ -166,7 +188,7 @@ export interface NestOptions {
   sheet: Sheet;
   rotation: RotationMode;
   quality: Quality;
-  /** Marcas de piezas que ya están colocadas y no deben moverse. */
+  /** Marcas de piezas que ya estÃ¡n colocadas y no deben moverse. */
   pinned: Placement[];
 }
 
@@ -178,6 +200,8 @@ export interface NestRequestPart {
   width: number;
   height: number;
   raster?: boolean;
+  /** Si se indican, se usan estos Ã¡ngulos en lugar de la rotaciÃ³n global. */
+  angles?: number[];
 }
 
 export interface NestResult {

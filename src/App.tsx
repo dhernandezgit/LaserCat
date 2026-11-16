@@ -6,7 +6,10 @@ import {
   saveStoredDoc,
 } from "./lib/store";
 import { computeStats, MACHINE_BY_ID } from "./lib/laser";
-import { downloadText, pickFiles, readFileText, safeFileName } from "./lib/download";
+import { pickFiles, readFileText, downloadText, safeFileName } from "./lib/download";
+import { normalizeDoc } from "./lib/store";
+import { cloneSavedGroup } from "./lib/groupLibrary";
+import { THEMES, THEME_STORAGE } from "./lib/themes";
 import { Header } from "./components/Header";
 import { PartsPanel } from "./components/PartsPanel";
 import { SheetPanel } from "./components/SheetPanel";
@@ -31,8 +34,16 @@ export default function App() {
   const [showGrid, setShowGrid] = useState(true);
   const [saved, setSaved] = useState(true);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
+  const [theme, setTheme] = useState<string>(() => {
+    try { return localStorage.getItem(THEME_STORAGE) || "eevee"; } catch { return "eevee"; }
+  });
   const warnedQuota = useRef(false);
   const { doc, ui, selection } = state;
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_STORAGE, theme); } catch { /* ignore */ }
+  }, [theme]);
 
   const stats = useMemo(() => computeStats(doc), [doc]);
   const pages = Math.max(1, ...doc.placements.map((p) => p.page + 1));
@@ -81,6 +92,27 @@ export default function App() {
     try {
       const text = await readFileText(f);
       const parsed = JSON.parse(text);
+      if (parsed?.format === "lasercat-group" && parsed.group && Array.isArray(parsed.parts)) {
+        const clean = normalizeDoc({
+          version: 1,
+          name: parsed.name || "Figura",
+          parts: parsed.parts,
+          placements: [],
+          sheet: { width: 300, height: 300, margin: 5 },
+          settings: {},
+        });
+        if (!clean) throw new Error("Figura no válida");
+        const cloned = cloneSavedGroup({
+          id: parsed.group.id || "saved",
+          name: parsed.name || parsed.group.name || "Figura",
+          createdAt: Date.now(),
+          parts: clean.parts,
+          group: parsed.group,
+        });
+        dispatch({ type: "ADD_PARTS", parts: cloned.parts, groups: [cloned.group] });
+        dispatch({ type: "TOAST", text: `Figura «${cloned.group.name}» cargada.`, kind: "ok" });
+        return;
+      }
       dispatch({ type: "LOAD_PROJECT", doc: parsed });
       setZoom(1);
     } catch {
@@ -135,6 +167,13 @@ export default function App() {
         }
         return;
       }
+      if (mod && e.key.toLowerCase() === "g") {
+        e.preventDefault();
+        if (selection.placementIds.length >= 2) {
+          dispatch({ type: "GROUP_PLACEMENTS", placementIds: selection.placementIds, name: "Grupo" });
+        }
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selection.placementIds.length) {
           e.preventDefault();
@@ -147,7 +186,9 @@ export default function App() {
       }
       if (e.key.toLowerCase() === "r") {
         e.preventDefault();
-        selection.placementIds.forEach((id) => dispatch({ type: "ROTATE_PLACEMENT", id, delta: e.shiftKey ? -90 : 90 }));
+        if (selection.placementIds.length) {
+          dispatch({ type: "ROTATE_SELECTION", placementIds: selection.placementIds, delta: e.shiftKey ? -90 : 90 });
+        }
         return;
       }
       if (e.key === "f") {
@@ -215,6 +256,7 @@ export default function App() {
   const previewOptions = useMemo(
     () => ({
       speciesId: doc.settings.previewSpecies,
+      burnTone: doc.settings.previewBurnTone,
       power: doc.settings.previewPower,
       speed: doc.settings.previewSpeed,
       passes: doc.settings.previewPasses,
@@ -222,7 +264,7 @@ export default function App() {
       showEngrave: true,
       showGuides: true,
     }),
-    [doc.settings.previewSpecies, doc.settings.previewPower, doc.settings.previewSpeed, doc.settings.previewPasses],
+    [doc.settings.previewSpecies, doc.settings.previewBurnTone, doc.settings.previewPower, doc.settings.previewSpeed, doc.settings.previewPasses],
   );
 
   return (
@@ -234,6 +276,8 @@ export default function App() {
         canRedo={state.future.length > 0}
         saved={saved}
         activeTab={ui.tab}
+        theme={theme}
+        onTheme={setTheme}
         onOpenProject={openProject}
         onExport={() => dispatch({ type: "SET_UI", patch: { showExportDialog: true } })}
         onHelp={() => dispatch({ type: "SET_UI", patch: { showHelpDialog: true } })}
@@ -241,6 +285,45 @@ export default function App() {
       />
 
       <div className="app-body">
+        <nav className="tool-rail" aria-label="Herramientas">
+          {([
+            { id: "diseno", label: "Diseño", icon: "layers" as const },
+            { id: "plancha", label: "Plancha", icon: "grid" as const },
+            { id: "grabado", label: "Grabado", icon: "engrave" as const },
+            { id: "material", label: "Material", icon: "wood" as const },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`rail-btn ${ui.tab === t.id ? "active" : ""}`}
+              onClick={() => changeTab(t.id)}
+              title={t.label}
+            >
+              <Icon name={t.icon} size={20} />
+              <span>{t.label}</span>
+            </button>
+          ))}
+          <div className="rail-spacer" />
+          <button
+            type="button"
+            className="rail-btn rail-export"
+            onClick={() => dispatch({ type: "SET_UI", patch: { showExportDialog: true } })}
+            title="Exportar para LightBurn"
+          >
+            <Icon name="download" size={20} />
+            <span>Exportar</span>
+          </button>
+          <button
+            type="button"
+            className="rail-btn"
+            onClick={() => dispatch({ type: "SET_UI", patch: { showHelpDialog: true } })}
+            title="Ayuda"
+          >
+            <Icon name="help" size={19} />
+            <span>Ayuda</span>
+          </button>
+        </nav>
+
         <aside className="sidebar">
           <div className="sidebar-scroll">{panel}</div>
           <div className="sidebar-foot">

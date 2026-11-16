@@ -7,7 +7,7 @@ type IconName =
   | "minus" | "fit" | "settings" | "image" | "grid" | "zoom" | "alert" | "check"
   | "x" | "arrow" | "chevron" | "chevronDown" | "chevronUp" | "cat" | "wood"
   | "sparkles" | "ruler" | "eye" | "eyeOff" | "lock" | "unlock" | "file" | "flame"
-  | "scissors" | "move" | "target" | "info" | "external" | "sort" | "shapes" | "magnet";
+  | "scissors" | "move" | "target" | "info" | "external" | "sort" | "shapes" | "magnet" | "palette";
 
 const PATHS: Record<IconName, ReactNode> = {
   upload: <><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></>,
@@ -57,6 +57,7 @@ const PATHS: Record<IconName, ReactNode> = {
   sort: <><path d="M8 4v16M4 8l4-4 4 4M16 20V4M12 16l4 4 4-4"/></>,
   shapes: <><rect x="3" y="3" width="8" height="8" rx="1"/><circle cx="17" cy="7" r="4"/><path d="m7 14 5 8H2l5-8ZM15 14h7v7h-7z"/></>,
   magnet: <><path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4H6Z"/><path d="M6 8h4M14 8h4"/></>,
+  palette: <><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2.2-.9 2.2-2 0-.9-.6-1.4-.6-2.2 0-1.2 1-2 2.2-2H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><circle cx="7.5" cy="10.5" r=".8" fill="currentColor"/><circle cx="10" cy="7" r=".8" fill="currentColor"/><circle cx="14" cy="7" r=".8" fill="currentColor"/><circle cx="16.5" cy="10.5" r=".8" fill="currentColor"/></>,
 };
 
 export function Icon({ name, size = 18, className }: { name: IconName; size?: number; className?: string }) {

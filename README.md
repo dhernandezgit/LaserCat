@@ -1,7 +1,7 @@
 # 🐈 LaserCat
 
 <div align="center">
-<img src="public/icon.svg" width="96" alt="LaserCat" />
+<img src="public/icon.png" width="96" alt="LaserCat" />
 
 **Corte y grabado láser, sin pelearte con la plancha.**
 
@@ -11,11 +11,12 @@
 </div>
 
 LaserCat es un taller local-first para preparar trabajos de láser: importa tus SVG e imágenes,
-separa las piezas, calcula el hueco real entre formas, aplica bordes y kerf, previsualiza el
-resultado en distintas maderas y exporta SVG en milímetros listos para **LightBurn**.
+separa las piezas, agrupa figuras completas, calcula el hueco real entre formas, aplica bordes y kerf,
+previsualiza el resultado en distintas maderas y exporta SVG en milímetros listos para **LightBurn**.
 
 Hecho para diodos como la **SculpFun S30 (10 W)**, con **tilo de 3 mm** como material de partida.
-Funciona con cualquier láser y cualquier plancha.
+Funciona con cualquier láser y cualquier plancha. La interfaz arranca con el tema **Eevee** y un
+rail de herramientas al estilo Cricut Design Space.
 
 - 🌐 **App:** https://dhernandezgit.github.io/LaserCat/
 - 📦 **Repo:** https://github.com/dhernandezgit/LaserCat
@@ -44,14 +45,37 @@ Funciona con cualquier láser y cualquier plancha.
 - **Unidades reales**: mm, cm, pulgadas, puntos, píxeles y `viewBox`.
 - **Transformaciones** (`matrix`, `translate`, `scale`, `rotate`, `skew`), `use`, `rect`, `circle`,
   `ellipse`, `line`, `polyline`, `polygon` y rutas completas con curvas y arcos.
+- **Imágenes SVG incrustadas** (`<image>` con data URL): se importan como **grabado** y sirven de
+  ancla para agrupar los cortes que las rodean; una imagen grande se convierte en una figura que
+  engloba sus piezas.
 - **Separación inteligente en islas**: un solo `<path>` con 40 iconos se convierte en 40 piezas;
   los ojos, letras y ventanas interiores se mantienen como **agujeros**, no como piezas sueltas.
 - **Grupos de Inkscape/Illustrator** respetados como pistas, con nombres de capa.
 - **Rellenos blancos → huecos** (opcional): los detalles blancos dentro de una silueta se recortan.
 - **Trazos sin relleno** convertidos a contorno de corte del grosor del trazo.
-- **Mapa de piezas** con la posición original, colores, líneas de cercanía y lista de **parejas**
-  (“qué se empareja con qué”). Puedes **unir**, **separar** y renombrar antes de añadir.
+- **Mapa de piezas** con la posición original, colores, **recuadros de figuras** y lista de
+  **parejas** (“qué se empareja con qué”). Puedes **fusionar**, **agrupar**, **separar** y renombrar
+  antes de añadir.
 - Escala por **ancho**, **alto** o tamaño real; simplificación de curvas configurable.
+- Pestaña **Grupos** con tarjetas por figura: nombre, copias, miembros, operación, incluir/excluir,
+  separar y vista previa con la imagen y los cortes ya montados.
+
+### Figuras y ensamblajes
+
+- Una **figura** es un grupo de piezas que se mueve, gira, fija, duplica y **se anida como una
+  unidad**. La imagen grabada y sus cortes mantienen el registro exacto del SVG original.
+- **Agrupar** desde el importador o con `Ctrl` + `G` en el tablero; **Desagrupar** desde el inspector.
+- Cada figura tiene **copias independientes**, nombre propio y miembros con su operación
+  (cortar / grabar / marcar).
+- El empaquetado **compacta** las figuras después de colocarlas y puede rotarlas si la plancha lo
+  permite, sin romper la alineación interna.
+- **Biblioteca de figuras**: guarda una figura con su nombre y sus **imágenes incluidas** y
+  reutilízala en otro proyecto. Se descarga un `.lasercat-group.json` con las imágenes en base64 y,
+  desde el inspector, un **ZIP para LightBurn** con SVG por capas, PNG, CSV y LEEME.
+
+![Figura creada con varias piezas y anidada como una unidad](docs/figuras.png)
+
+![Mapa de grupos y piezas del importador](docs/mapa-grupos.png)
 
 ### Imágenes para cortar o grabar
 
@@ -73,12 +97,26 @@ Funciona con cualquier láser y cualquier plancha.
 ### Vista en madera
 
 - **9 maderas**: tilo, abedul, roble, nogal, cerezo, bambú, DM/MDF, pino y cartón.
+- **5 tonos de láser**: miel, café, carbón, gris y rojizo, para comparar el mismo trabajo con
+  distintas quemaduras.
 - **Intensidad, velocidad y pasadas** en directo, con halo de quemado y líneas de corte.
-- Galería de **4 intensidades** para comparar de un vistazo.
+- Galería de **4 intensidades** para comparar de un vistazo y **comparador 4 maderas × 4 intensidades**.
 - Exporta la previsualización a PNG.
 - Simulación orientativa: cada máquina, lente y tablero quema distinto.
 
 ![Distintas maderas con el mismo diseño](docs/maderas.jpg)
+
+![Comparador de 4 maderas y 4 intensidades](docs/comparador.png)
+
+### Temas y aspecto
+
+- **Eevee** por defecto: crema, caramelo y cabecera clara, con un rail de herramientas a la izquierda
+  y paneles de figuras al estilo Cricut.
+- También **Sylveon** (rosa), **Leafeon** (verde), **Vaporeon** (azul), **Umbreon** (noche y oro) y
+  **Taller** (nogal oscuro original).
+- El tema se cambia con el **pincel** de la cabecera y se recuerda en el navegador.
+
+![Tema Eevee con figuras y tonos de madera](docs/tonos.png)
 
 ### Exportar a LightBurn
 
@@ -92,7 +130,9 @@ Funciona con cualquier láser y cualquier plancha.
 - Grabado antes que corte en el orden del documento.
 - **Kerf**, **puentes de sujeción**, marcas de esquina y **orden de recorridos** por cercanía.
 - Imágenes de grabado **incrustadas** en el SVG y también como PNG sueltos en el ZIP.
-- El ZIP incluye:
+- Exportación **por figura**: desde el inspector, un ZIP compacto con el SVG de esa figura, sus
+  imágenes, el CSV de capas y el LEEME.
+- El ZIP completo incluye:
   - `*-plancha-01.svg`, `*-plancha-02.svg`…
   - `lasercat-proyecto.json`
   - `ajustes-capas.csv`
@@ -100,10 +140,21 @@ Funciona con cualquier láser y cualquier plancha.
   - `imagenes/*.png`
   - `previews/*-madera.png`
 
-![Revisión de piezas importadas](docs/importar-svg.png)
+![Revisión de figuras importadas](docs/importar-svg.png)
+
+### Volver de LightBurn a LaserCat
+
+Para reimportar desde LightBurn una figura con sus imágenes y grupos, exporta un **SVG con las
+imágenes incrustadas** (data URL, no enlazadas). LaserCat lo lee, vuelve a detectar las figuras y
+separa los cortes. El formato nativo `.lbrn2` conserva capas y grupos, pero todavía no tiene parser;
+si compartes un proyecto de ejemplo, se puede añadir soporte nativo. Mientras tanto, el SVG con
+imágenes incrustadas es el camino fiable.
+
+![Inspector de una figura con sus imágenes, guardado y exportación](docs/guardar-figura.png)
 
 ### Extras de taller
 
+- **Biblioteca de figuras** guardadas con sus imágenes, nombres propios y miniaturas.
 - **Tarjeta de pruebas** de 24 celdas (6 potencias × 4 velocidades), un color por celda y CSV de ajustes.
 - **Presets de material** para S30 de 10 W, S30 Pro de 20 W, S30 Ultra de 22 W, diodo de 5 W y CO₂ de 40 W.
 - **Historial** con deshacer/rehacer, autoguardado local, proyecto `.json`, atajos y diseño responsive.
@@ -114,27 +165,33 @@ Funciona con cualquier láser y cualquier plancha.
 ## 🚀 Empezar en 5 pasos
 
 1. Abre **https://dhernandezgit.github.io/LaserCat/** (o ejecuta `npm run dev`).
-2. Arrastra un **SVG** o una **imagen** al tablero, o pulsa **Importar SVG**.
-3. Revisa el **mapa**, une/separa lo que haga falta y pulsa **Añadir y colocar**.
-4. Ajusta la plancha: 300 × 300 mm, margen 5 mm, separación 3 mm, kerf 0,15 mm.
-5. Pulsa **Exportar → Descargar ZIP** e importa el SVG en LightBurn.
+2. Arrastra un **SVG** (con imágenes incrustadas si las tiene) o una **imagen**, o pulsa **Importar SVG**.
+3. Revisa **Grupos** y **Mapa**; renombra figuras, cambia copias, agrupa o separa lo que haga falta.
+4. Pulsa **Añadir y colocar**. Ajusta la plancha: 300 × 300 mm, margen 5 mm, separación 3 mm, kerf 0,15 mm.
+5. Pulsa **Exportar → Descargar ZIP** e importa el SVG en LightBurn. Si quieres guardar una figura
+   suelta, usa **Guardar «nombre»** en su inspector.
 
 > **Consejo:** la calidad **Máxima** suele meter en una plancha lo que la calidad rápida reparte en dos.
-> Si algo no cabe, prueba Máxima, baja la separación o reduce el borde.
+> Si algo no cabe, prueba Máxima, baja la separación o reduce el borde. Las figuras se compactan
+> después de anidar y conservan la alineación entre imagen y cortes.
 
 ---
 
 ## 🧭 La interfaz
 
+La app tiene un **rail de herramientas** a la izquierda, el tablero en el centro y el inspector a la derecha.
+En el rail cambias de sección sin duplicar pestañas; en el inspector ves la pieza o figura seleccionada.
+
 | Zona | Para qué sirve |
 |---|---|
-| **Piezas** | Importar, ver todas las piezas, copias, operación, bordes y atajos. |
+| **Diseño** | Importar, figuras, piezas, copias, operaciones, bordes y biblioteca. |
 | **Plancha** | Tamaño, margen, separación, kerf, rotación, calidad y optimización. |
 | **Grabado** | Máquina, material, presets y capas del archivo. |
-| **Material** | Maderas, intensidad, galería de pruebas y tarjeta de pruebas. |
-| **Inspector derecho** | Editar la pieza seleccionada: tamaño, copias, borde, operación, posición y pin. |
-| **Tablero** | Arrastrar, girar, fijar y ver el aprovechamiento. |
+| **Material** | Maderas, tonos, intensidad, galería, comparador y tarjeta de pruebas. |
+| **Inspector derecho** | Editar pieza o figura: tamaño, copias, borde, operación, posición, guardar y exportar. |
+| **Tablero** | Arrastrar, girar, fijar, seleccionar figuras enteras y ver el aprovechamiento. |
 | **Vista Madera** | Simulación realista antes de quemar. |
+| **Pincel de la cabecera** | Cambiar entre Eevee, Sylveon, Leafeon, Vaporeon, Umbreon y Taller. |
 
 <p align="center">
   <img src="docs/movil.png" width="260" alt="LaserCat en móvil" />
@@ -150,12 +207,16 @@ Funciona con cualquier láser y cualquier plancha.
 | `Ctrl` + `D` | Duplicar |
 | `Supr` | Quitar de la plancha |
 | `R` / `Mayús` + `R` | Girar +90° / −90° |
+| `Ctrl` + `G` | Agrupar las piezas seleccionadas como figura |
 | `F` | Encuadrar |
 | `Ctrl` + `A` | Seleccionar todo |
 | Flechas | Mover 1 mm (Mayús: 5 mm) |
 | `Alt` + arrastrar | Mover sin imán de 0,5 mm |
 | `Ctrl` + `S` / `Ctrl` + `O` | Guardar / abrir proyecto `.json` |
 | `Esc` | Deseleccionar / cerrar |
+
+> Un clic en cualquier miembro selecciona la **figura completa**; `Mayús` + clic añade o quita figuras.
+> `Ctrl` + `O` también acepta un `.lasercat-group.json` guardado desde la biblioteca.
 
 ---
 
@@ -229,7 +290,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 53 tests (geometría, importador, nesting, export, store, tarjeta)
+npm test           # 55 tests (geometría, importador SVG con imágenes, figuras, nesting, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estático
 npm run preview
@@ -242,17 +303,20 @@ src/
   lib/
     geom.ts          contornos, áreas, rotaciones, simplificación
     clipper.ts       booleanos y offsets robustos (Clipper)
-    svgImport.ts     parser SVG, unidades, transformaciones, islas y grupos
+    svgImport.ts     parser SVG, imágenes incrustadas, unidades, islas y figuras
     trace.ts         marching squares, umbral, tramado, semitono
-    nest.ts          empaquetado por forma real (raster + colisión)
+    nest.ts          empaquetado por forma real (raster + colisión + compactación)
+    assembly.ts      figuras/ensamblajes, geometría combinada y rotación
+    groupLibrary.ts  biblioteca, JSON y ZIP por figura
+    themes.ts        temas Eevee, Sylveon, Leafeon, Vaporeon, Umbreon y Taller
     laser.ts         máquinas, materiales, capas, kerf y tiempos
     export.ts        SVG para LightBurn, puentes, ZIP y LEEME
-    wood.ts          textura procedural y simulación de quemado
+    wood.ts          textura procedural, tonos y simulación de quemado
     testcard.ts      tarjeta de pruebas de 24 celdas
     store.ts         estado, historial, autoguardado y normalización
   components/        interfaz React
-  styles.css         tema de papel, nogal y latón
-examples/            SVG e imagen de muestra
+  styles.css         temas, rail de herramientas y estilo de papel
+examples/            SVG e imagen de muestra propios
 docs/                capturas para el README
 ```
 
@@ -265,10 +329,11 @@ npm test
 Cubren, entre otras cosas:
 
 - Áreas, rotaciones, RDP, offsets con huecos y kerf.
-- Importación de SVG con mm/viewBox, transformaciones, trazos, grupos y blancos como huecos.
-- Separación de islas, agrupación por distancia real y nombres de grupo.
+- Importación de SVG con mm/viewBox, transformaciones, trazos, imágenes incrustadas, grupos y blancos como huecos.
+- Separación de islas, agrupación por distancia real, figuras automáticas y nombres de grupo.
+- Figuras: geometría combinada, offsets, rotación, copias, fijado, biblioteca y JSON con imágenes.
 - Tres modos de imagen: silueta, agujeros, marching squares, tramado y semitono.
-- Nesting sin solapes reales, respeto del margen y varias planchas.
+- Nesting sin solapes reales, respeto del margen, varias planchas y compactación.
 - Exportación con capas, kerf, puentes, imágenes y ZIP.
 - Historial, copias, pin y normalización de proyectos.
 - Tarjeta de pruebas y validez XML.
@@ -309,6 +374,7 @@ la herramienta que colocaba imágenes para Cricut. LaserCat cambia el papel por 
 un diodo y el PNG por SVG en milímetros.
 
 - Inspiración y filosofía: **CryCat Tool**.
+- Icono: recorte cuadrado superior de la foto original de LaserCat.
 - Geometría robusta: [clipper-lib](https://github.com/junmer/clipper-lib).
 - ZIP: [fflate](https://github.com/101arrowz/fflate).
 - Interfaz: React + Vite + TypeScript.
@@ -320,11 +386,13 @@ Si te sirve, pásate por el repo y deja una estrella ⭐.
 ## 🇬🇧 English in a nutshell
 
 **LaserCat** is a local-first laser cutting/engraving layout studio. It imports SVGs with real
-units and groups, splits them into smart islands (holes included), handles white cut-outs, imports
-images as silhouettes / B&W / grayscale / dither / vector halftone, applies sticker offsets and
-kerf, nests parts using their true shape, previews the result on nine wood species, and exports
-LightBurn-ready SVG in millimetres with colour-coded layers, bridges and a ZIP containing the
-project, layer CSV, embedded raster images and wood previews. Defaults: SculpFun S30 10 W,
-300 × 300 mm sheet, 5 mm margin, basswood 3 mm. No server, no account, no uploads.
+units, embedded images and groups, splits them into smart islands (holes included), handles white
+cut-outs, imports images as silhouettes / B&W / grayscale / dither / vector halftone, builds movable
+figures (image engraving + cut pieces), applies sticker offsets and kerf, nests parts and figures
+using their true shape with post-compaction, previews the result on nine wood species with five laser
+tones, and exports LightBurn-ready SVG in millimetres with colour-coded layers, bridges and a ZIP
+containing the project, per-figure exports, layer CSV, embedded raster images and wood previews.
+Defaults: SculpFun S30 10 W, 300 × 300 mm sheet, 5 mm margin, basswood 3 mm. Eevee is the default
+theme, with Sylveon, Leafeon, Vaporeon, Umbreon and Taller available. No server, no account, no uploads.
 
 Built by **Daniel Hernández Ferrándiz**. MIT licensed.

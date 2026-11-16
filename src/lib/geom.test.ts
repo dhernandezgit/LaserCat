@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { contourArea, contoursBounds, rotateContours, simplifyRDP } from "./geom";
-import { offsetContours, normalizeOrientation } from "./clipper";
+import { offsetContours, normalizeOrientation, clipperArea } from "./clipper";
 import { demoParts } from "./demo";
 import { effectiveGeometry, placeEffective, computeStats } from "./laser";
 import type { Placement } from "../types";
@@ -60,6 +60,18 @@ describe("offset", () => {
     ];
     const n = normalizeOrientation([rev]);
     expect(contourArea(n[0])).toBeGreaterThan(0);
+  });
+
+  it("computes real area with holes and never NaN", () => {
+    const outer = [
+      { x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 20 }, { x: 0, y: 20 },
+    ];
+    const hole = [
+      { x: 5, y: 5 }, { x: 5, y: 15 }, { x: 15, y: 15 }, { x: 15, y: 5 },
+    ];
+    const area = clipperArea(normalizeOrientation([outer, hole]));
+    expect(Number.isFinite(area)).toBe(true);
+    expect(area).toBeCloseTo(300, 0);
   });
 
   it("effective geometry shifts the design inside the border", () => {

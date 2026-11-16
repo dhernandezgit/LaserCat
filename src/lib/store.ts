@@ -1,19 +1,22 @@
 /** Estado global, historial y colocación automática. */
 
 import type {
+  Assembly,
   Doc,
   DocSettings,
   EngraveMode,
+  NestRequestPart,
   Part,
   Placement,
   SelectionState,
   Sheet,
 } from "../types";
 import { demoParts } from "./demo";
-import { rotatedSize } from "./geom";
+import { rotatedSize, rotatePt } from "./geom";
 import { effectiveGeometry } from "./laser";
 import { nestParts } from "./nest";
 import type { NestResult } from "../types";
+import { assemblyGeometry, assemblyFromPlacements, getGroups, normalizeMembers, rotatePlacements } from "./assembly";
 
 export const STORAGE_KEY = "lasercat-doc-v1";
 
@@ -43,6 +46,7 @@ export const DEFAULT_SETTINGS: DocSettings = {
   engraveOutput: "raster",
   ditherDotsPerMm: 3,
   previewSpecies: "tilo",
+  previewBurnTone: "miel",
   previewPower: 35,
   previewSpeed: 3600,
   previewPasses: 1,
@@ -83,7 +87,7 @@ export interface AppState {
 }
 
 export type Action =
-  | { type: "ADD_PARTS"; parts: Part[]; nest?: boolean }
+  | { type: "ADD_PARTS"; parts: Part[]; groups?: Assembly[]; nest?: boolean }
   | { type: "UPDATE_PART"; id: string; patch: Partial<Part>; nest?: boolean; key?: string }
   | { type: "RESIZE_PART"; id: string; width: number; height: number; nest?: boolean }
   | { type: "REMOVE_PARTS"; ids: string[] }
@@ -93,11 +97,18 @@ export type Action =
   | { type: "SET_POSITIONS"; positions: { id: string; x: number; y: number }[]; key?: string }
   | { type: "SET_PLACEMENT"; id: string; patch: Partial<Placement> }
   | { type: "ROTATE_PLACEMENT"; id: string; delta: number }
+  | { type: "ROTATE_SELECTION"; placementIds: string[]; delta: number; key?: string }
   | { type: "PIN_PLACEMENT"; id: string; pinned: boolean }
   | { type: "DELETE_PLACEMENT"; id: string }
   | { type: "DUPLICATE_PLACEMENT"; id: string }
   | { type: "DUPLICATE_PART"; id: string }
   | { type: "ADD_SHAPE"; shape: Part }
+  | { type: "SET_ASSEMBLY_COPIES"; id: string; copies: number }
+  | { type: "RENAME_ASSEMBLY"; id: string; name: string }
+  | { type: "ROTATE_ASSEMBLY"; id: string; delta: number }
+  | { type: "PIN_ASSEMBLY"; id: string; pinned: boolean }
+  | { type: "UNGROUP"; id: string }
+  | { type: "GROUP_PLACEMENTS"; placementIds: string[]; name?: string }
   | { type: "CLEAR" }
   | { type: "RENAME"; name: string }
   | { type: "LOAD_PROJECT"; doc: Doc }
@@ -127,22 +138,54 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
       nest: { at: now(), unplaced: 0, efficiency: 0, pages: 1, elapsedMs: 0 },
     };
   }
-  const pinned = doc.placements.filter((p) => p.pinned && doc.parts.some((part) => part.id === p.partId));
+  const partsById = new Map(doc.parts.map((p) => [p.id, p]));
+  const groups = getGroups(doc);
+  const groupedPartIds = new Set(groups.flatMap((g) => g.members.map((m) => m.partId)));
+  const pinned = doc.placements.filter((p) => p.pinned && partsById.has(p.partId));
   const pinnedCount = new Map<string, number>();
   for (const p of pinned) pinnedCount.set(p.partId, (pinnedCount.get(p.partId) || 0) + 1);
 
-  const request = doc.parts.map((part) => {
+  // Un grupo se considera fijado si todos sus miembros tienen una colocación fijada.
+  const pinnedGroups = new Set<string>();
+  for (const group of groups) {
+    const gp = pinned.filter((p) => p.assemblyId === group.id || group.members.some((m) => m.partId === p.partId));
+    const ids = new Set(gp.map((p) => p.partId));
+    if (group.members.length > 0 && group.members.every((m) => ids.has(m.partId))) {
+      pinnedGroups.add(group.id);
+    }
+  }
+
+  const request: NestRequestPart[] = [];
+  // Piezas reales con copies 0: sirven para que el packer encuentre las fijadas.
+  for (const part of doc.parts) {
+    const grouped = groupedPartIds.has(part.id);
     const g = effectiveGeometry(part);
     const already = pinnedCount.get(part.id) || 0;
-    return {
+    request.push({
       partId: part.id,
-      copies: Math.max(0, part.copies - already),
+      copies: grouped ? 0 : Math.max(0, part.copies - already),
       contours: g.outer,
       width: g.width,
       height: g.height,
       raster: part.kind === "raster",
-    };
-  });
+      angles: grouped ? [0] : undefined,
+    });
+  }
+  // Groups as synthetic nestable units, axis-aligned to keep exact registration.
+  const groupGeo = new Map<string, ReturnType<typeof assemblyGeometry>>();
+  for (const group of groups) {
+    const geo = assemblyGeometry(group, doc.parts);
+    if (!geo.contours.length) continue;
+    groupGeo.set(group.id, geo);
+    const already = pinnedGroups.has(group.id) ? 1 : 0;
+    request.push({
+      partId: `asm:${group.id}`,
+      copies: Math.max(0, group.copies - already),
+      contours: geo.contours,
+      width: geo.width,
+      height: geo.height,
+    });
+  }
 
   let result: NestResult;
   try {
@@ -160,11 +203,53 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
     };
   }
   const fresh = result.placements.slice(0, Math.max(0, result.placements.length - pinned.length));
+  const freshPlacements: Placement[] = [];
+  for (const p of fresh) {
+    if (p.partId.startsWith("asm:")) {
+      const groupId = p.partId.slice(4);
+      const group = groups.find((g) => g.id === groupId);
+      const geo = groupGeo.get(groupId);
+      if (!group || !geo) continue;
+      const rw = rotatedSize({ width: geo.width, height: geo.height }, p.angle).w;
+      const rh = rotatedSize({ width: geo.width, height: geo.height }, p.angle).h;
+      const cx = geo.width / 2;
+      const cy = geo.height / 2;
+      const localMinX = cx - rw / 2;
+      const localMinY = cy - rh / 2;
+      for (const member of geo.members) {
+        const part = partsById.get(member.partId);
+        if (!part) continue;
+        const pg = effectiveGeometry(part);
+        const center = rotatePt(
+          { x: member.dx + pg.width / 2, y: member.dy + pg.height / 2 },
+          cx,
+          cy,
+          p.angle,
+        );
+        const size = rotatedSize({ width: pg.width, height: pg.height }, p.angle);
+        freshPlacements.push({
+          id: nextId("pl"),
+          partId: member.partId,
+          page: p.page,
+          x: Math.round((p.x + center.x - localMinX - size.w / 2) * 100) / 100,
+          y: Math.round((p.y + center.y - localMinY - size.h / 2) * 100) / 100,
+          angle: p.angle,
+          mirror: false,
+          pinned: false,
+          assemblyId: group.id,
+        });
+      }
+    } else {
+      freshPlacements.push({
+        ...p,
+        id: nextId("pl"),
+        pinned: false,
+        assemblyId: undefined,
+      });
+    }
+  }
   const preserved = doc.placements.filter((p) => p.pinned);
-  const placements: Placement[] = [
-    ...fresh.map((p) => ({ ...p, id: nextId("pl"), pinned: false })),
-    ...preserved,
-  ];
+  const placements: Placement[] = [...freshPlacements, ...preserved];
   const existingIds = new Set(doc.parts.map((p) => p.id));
   const valid = placements.filter((p) => existingIds.has(p.partId));
   const pages = Math.max(1, ...valid.map((p) => p.page + 1));
@@ -240,6 +325,7 @@ export function createEmptyDoc(): Doc {
     name: "Plancha nueva",
     parts: [],
     placements: [],
+    groups: [],
     sheet: { ...DEFAULT_SHEET },
     settings: { ...DEFAULT_SETTINGS },
     createdAt: now(),
@@ -323,8 +409,23 @@ export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "ADD_PARTS": {
       if (!action.parts.length) return state;
-      let doc = { ...state.doc, parts: [...state.doc.parts, ...action.parts] };
-      if (action.nest === false) doc = placeNewParts(doc, action.parts);
+      const incomingGroups = action.groups || [];
+      const groupOf = new Map<string, Assembly>();
+      for (const g of incomingGroups) for (const m of g.members) groupOf.set(m.partId, g);
+      const parts = action.parts.map((p) => {
+        const g = groupOf.get(p.id);
+        return g ? { ...p, assemblyId: g.id, copies: 1 } : p;
+      });
+      let doc: Doc = {
+        ...state.doc,
+        parts: [...state.doc.parts, ...parts],
+        groups: [...getGroups(state.doc), ...incomingGroups.map((g) => ({
+          ...g,
+          members: normalizeMembers(g.members, parts),
+          copies: Math.max(1, g.copies || 1),
+        }))],
+      };
+      if (action.nest === false && !incomingGroups.length) doc = placeNewParts(doc, parts);
       return autoNestOrKeep(state, doc, "add-parts");
     }
     case "ADD_SHAPE": {
@@ -354,15 +455,33 @@ export function reducer(state: AppState, action: Action): AppState {
     }
     case "REMOVE_PARTS": {
       const ids = new Set(action.ids);
-      const doc = {
-        ...state.doc,
-        parts: state.doc.parts.filter((p) => !ids.has(p.id)),
-        placements: state.doc.placements.filter((p) => !ids.has(p.partId)),
-      };
-      return autoNestOrKeep(state, doc, "remove-parts");
+      const parts = state.doc.parts.filter((p) => !ids.has(p.id));
+      const groups = getGroups(state.doc)
+        .map((g) => {
+          const members = g.members.filter((m) => !ids.has(m.partId));
+          return { ...g, members };
+        })
+        .filter((g) => g.members.length >= 2);
+      const validGroup = new Set(groups.map((g) => g.id));
+      const cleanedParts = parts.map((p) =>
+        p.assemblyId && !validGroup.has(p.assemblyId) ? { ...p, assemblyId: undefined } : p,
+      );
+      const placements = state.doc.placements
+        .filter((p) => !ids.has(p.partId))
+        .map((p) => (p.assemblyId && !validGroup.has(p.assemblyId) ? { ...p, assemblyId: undefined, pinned: false } : p));
+      return autoNestOrKeep(state, { ...state.doc, parts: cleanedParts, placements, groups }, "remove-parts");
     }
     case "SET_COPIES": {
       const copies = Math.max(0, Math.min(999, Math.round(action.copies)));
+      const part = state.doc.parts.find((p) => p.id === action.id);
+      if (part?.assemblyId) {
+        const groups = getGroups(state.doc).map((g) =>
+          g.id === part.assemblyId ? { ...g, copies: Math.max(0, copies) } : g,
+        );
+        const res = nestDoc({ ...state.doc, groups });
+        const next = withDoc(state, res.doc, `copies-${part.assemblyId}`);
+        return { ...next, lastNest: res.nest };
+      }
       const parts = state.doc.parts.map((p) => (p.id === action.id ? { ...p, copies } : p));
       const doc = { ...state.doc, parts };
       // Cambiar el número de copias siempre recoloca: no tiene sentido
@@ -399,6 +518,18 @@ export function reducer(state: AppState, action: Action): AppState {
       return withDoc(state, { ...state.doc, placements }, `set-${action.id}`);
     }
     case "ROTATE_PLACEMENT": {
+      const placement = state.doc.placements.find((p) => p.id === action.id);
+      if (!placement) return state;
+      if (placement.assemblyId) {
+        const groupPlacements = state.doc.placements.filter((p) => p.assemblyId === placement.assemblyId);
+        const rotated = rotatePlacements(state.doc.parts, groupPlacements, action.delta);
+        const map = new Map(rotated.map((p) => [p.id, p]));
+        return withDoc(
+          state,
+          { ...state.doc, placements: state.doc.placements.map((p) => map.get(p.id) || p) },
+          `rotate-${action.id}`,
+        );
+      }
       const placements = state.doc.placements.map((p) => {
         if (p.id !== action.id) return p;
         const part = state.doc.parts.find((x) => x.id === p.partId);
@@ -415,15 +546,40 @@ export function reducer(state: AppState, action: Action): AppState {
       });
       return withDoc(state, { ...state.doc, placements }, `rotate-${action.id}`);
     }
+    case "ROTATE_SELECTION": {
+      const chosen = state.doc.placements.filter((p) => action.placementIds.includes(p.id));
+      if (!chosen.length) return state;
+      const rotated = rotatePlacements(state.doc.parts, chosen, action.delta);
+      const map = new Map(rotated.map((p) => [p.id, p]));
+      return withDoc(
+        state,
+        { ...state.doc, placements: state.doc.placements.map((p) => map.get(p.id) || p) },
+        action.key || "rotate-selection",
+      );
+    }
     case "PIN_PLACEMENT": {
+      const placement = state.doc.placements.find((p) => p.id === action.id);
+      if (!placement) return state;
+      const ids = placement.assemblyId
+        ? new Set(state.doc.placements.filter((p) => p.assemblyId === placement.assemblyId).map((p) => p.id))
+        : new Set([action.id]);
       const placements = state.doc.placements.map((p) =>
-        p.id === action.id ? { ...p, pinned: action.pinned } : p,
+        ids.has(p.id) ? { ...p, pinned: action.pinned } : p,
       );
       return withDoc(state, { ...state.doc, placements }, `pin-${action.id}`);
     }
     case "DELETE_PLACEMENT": {
       const placement = state.doc.placements.find((p) => p.id === action.id);
       if (!placement) return state;
+      if (placement.assemblyId) {
+        const group = getGroups(state.doc).find((g) => g.id === placement.assemblyId);
+        const placements = state.doc.placements.filter((p) => p.assemblyId !== placement.assemblyId);
+        const groups = getGroups(state.doc).filter((g) => g.id !== placement.assemblyId);
+        const parts = state.doc.parts.map((p) =>
+          group?.members.some((m) => m.partId === p.id) ? { ...p, assemblyId: undefined, copies: 0 } : p,
+        );
+        return withDoc(state, { ...state.doc, placements, groups, parts }, `delete-group-${placement.assemblyId}`);
+      }
       const placements = state.doc.placements.filter((p) => p.id !== action.id);
       const parts = state.doc.parts.map((p) =>
         p.id === placement.partId ? { ...p, copies: Math.max(0, p.copies - 1) } : p,
@@ -433,6 +589,14 @@ export function reducer(state: AppState, action: Action): AppState {
     case "DUPLICATE_PLACEMENT": {
       const placement = state.doc.placements.find((p) => p.id === action.id);
       if (!placement) return state;
+      if (placement.assemblyId) {
+        const groups = getGroups(state.doc).map((g) =>
+          g.id === placement.assemblyId ? { ...g, copies: g.copies + 1 } : g,
+        );
+        const res = nestDoc({ ...state.doc, groups });
+        const next = withDoc(state, res.doc, `duplicate-${placement.assemblyId}`);
+        return { ...next, lastNest: res.nest };
+      }
       const parts = state.doc.parts.map((p) =>
         p.id === placement.partId ? { ...p, copies: p.copies + 1 } : p,
       );
@@ -449,6 +613,41 @@ export function reducer(state: AppState, action: Action): AppState {
     case "DUPLICATE_PART": {
       const part = state.doc.parts.find((p) => p.id === action.id);
       if (!part) return state;
+      if (part.assemblyId) {
+        const group = getGroups(state.doc).find((g) => g.id === part.assemblyId);
+        if (!group) return state;
+        const idMap = new Map<string, string>();
+        const copies: Part[] = [];
+        for (const member of group.members) {
+          const source = state.doc.parts.find((p) => p.id === member.partId);
+          if (!source) continue;
+          const nid = nextId("part");
+          idMap.set(source.id, nid);
+          copies.push({
+            ...source,
+            id: nid,
+            name: `${source.name} copia`,
+            copies: 1,
+            assemblyId: undefined,
+            contours: source.contours.map((c) => c.map((p) => ({ ...p }))),
+          });
+        }
+        const ng: Assembly = {
+          ...group,
+          id: nextId("asm"),
+          name: `${group.name} copia`,
+          copies: 1,
+          members: group.members
+            .filter((m) => idMap.has(m.partId))
+            .map((m) => ({ ...m, partId: idMap.get(m.partId)! })),
+        };
+        const doc = {
+          ...state.doc,
+          parts: [...state.doc.parts, ...copies.map((p) => ({ ...p, assemblyId: ng.id }))],
+          groups: [...getGroups(state.doc), ng],
+        };
+        return autoNestOrKeep(state, doc, "duplicate-group");
+      }
       const copy: Part = {
         ...part,
         id: nextId("part"),
@@ -459,11 +658,95 @@ export function reducer(state: AppState, action: Action): AppState {
       const doc = { ...state.doc, parts: [...state.doc.parts, copy] };
       return autoNestOrKeep(state, doc, "duplicate-part");
     }
+    case "SET_ASSEMBLY_COPIES": {
+      const groups = getGroups(state.doc).map((g) =>
+        g.id === action.id ? { ...g, copies: Math.max(0, Math.min(999, Math.round(action.copies))) } : g,
+      );
+      const res = nestDoc({ ...state.doc, groups });
+      const next = withDoc(state, res.doc, `group-copies-${action.id}`);
+      return { ...next, lastNest: res.nest };
+    }
+    case "RENAME_ASSEMBLY": {
+      const groups = getGroups(state.doc).map((g) =>
+        g.id === action.id ? { ...g, name: action.name.trim() || g.name } : g,
+      );
+      return withDoc(state, { ...state.doc, groups }, `group-name-${action.id}`);
+    }
+    case "ROTATE_ASSEMBLY": {
+      const chosen = state.doc.placements.filter((p) => p.assemblyId === action.id);
+      if (!chosen.length) return state;
+      const rotated = rotatePlacements(state.doc.parts, chosen, action.delta);
+      const map = new Map(rotated.map((p) => [p.id, p]));
+      return withDoc(
+        state,
+        { ...state.doc, placements: state.doc.placements.map((p) => map.get(p.id) || p) },
+        `group-rotate-${action.id}`,
+      );
+    }
+    case "PIN_ASSEMBLY": {
+      const placements = state.doc.placements.map((p) =>
+        p.assemblyId === action.id ? { ...p, pinned: action.pinned } : p,
+      );
+      return withDoc(state, { ...state.doc, placements }, `group-pin-${action.id}`);
+    }
+    case "UNGROUP": {
+      const group = getGroups(state.doc).find((g) => g.id === action.id);
+      if (!group) return state;
+      const memberIds = new Set(group.members.map((m) => m.partId));
+      const counts = new Map<string, number>();
+      for (const p of state.doc.placements) {
+        if (memberIds.has(p.partId)) counts.set(p.partId, (counts.get(p.partId) || 0) + 1);
+      }
+      const parts = state.doc.parts.map((p) =>
+        memberIds.has(p.id)
+          ? { ...p, assemblyId: undefined, copies: Math.max(1, counts.get(p.id) || 1) }
+          : p,
+      );
+      const placements = state.doc.placements.map((p) =>
+        p.assemblyId === action.id ? { ...p, assemblyId: undefined } : p,
+      );
+      const groups = getGroups(state.doc).filter((g) => g.id !== action.id);
+      return withDoc(state, { ...state.doc, parts, placements, groups }, `ungroup-${action.id}`);
+    }
+    case "GROUP_PLACEMENTS": {
+      const chosen = state.doc.placements.filter((p) => action.placementIds.includes(p.id));
+      const partIds = Array.from(new Set(chosen.map((p) => p.partId)));
+      if (partIds.length < 2) return state;
+      // Solo se agrupan piezas que tengan una única colocación.
+      const usable = partIds.filter((id) => state.doc.placements.filter((p) => p.partId === id).length === 1);
+      if (usable.length < 2) {
+        return { ...state, ui: { ...state.ui, toast: { text: "Para agrupar, cada pieza debe tener una sola copia colocada.", kind: "warn" } } };
+      }
+      const selected = chosen.filter((p) => usable.includes(p.partId));
+      const { group } = assemblyFromPlacements(
+        state.doc.parts.filter((p) => usable.includes(p.id)),
+        selected,
+        action.name || "Grupo",
+      );
+      const minX = Math.min(...selected.map((p) => p.x));
+      const minY = Math.min(...selected.map((p) => p.y));
+      group.members = selected.map((p) => ({ partId: p.partId, dx: p.x - minX, dy: p.y - minY }));
+      const parts = state.doc.parts.map((p) =>
+        usable.includes(p.id) ? { ...p, assemblyId: group.id, copies: 1 } : p,
+      );
+      const placements = state.doc.placements.map((p) =>
+        usable.includes(p.partId) && selected.some((s) => s.id === p.id)
+          ? { ...p, assemblyId: group.id }
+          : p,
+      );
+      // Eliminar grupos anteriores de esas piezas.
+      const groups = getGroups(state.doc)
+        .map((g) => ({ ...g, members: g.members.filter((m) => !usable.includes(m.partId)) }))
+        .filter((g) => g.members.length >= 2);
+      groups.push(group);
+      return withDoc(state, { ...state.doc, parts, placements, groups }, "group-placements");
+    }
     case "CLEAR": {
       const doc = {
         ...state.doc,
         parts: [],
         placements: [],
+        groups: [],
         name: state.doc.name,
         updatedAt: now(),
       };
@@ -604,6 +887,7 @@ export function normalizeDoc(input: any): Doc | null {
       raster: raw.raster && typeof raw.raster.dataUrl === "string" ? raw.raster : undefined,
       color: typeof raw.color === "string" ? raw.color : undefined,
       groupId: typeof raw.groupId === "string" ? raw.groupId : undefined,
+      assemblyId: typeof raw.assemblyId === "string" ? raw.assemblyId : undefined,
       notes: typeof raw.notes === "string" ? raw.notes : undefined,
       lockedSize: Boolean(raw.lockedSize),
     });
@@ -623,6 +907,7 @@ export function normalizeDoc(input: any): Doc | null {
           angle: Number.isFinite(Number(p.angle)) ? Number(p.angle) : 0,
           mirror: Boolean(p.mirror),
           pinned: Boolean(p.pinned),
+          assemblyId: typeof p.assemblyId === "string" ? p.assemblyId : undefined,
         }))
     : [];
   const sheet: Sheet = {
@@ -644,11 +929,45 @@ export function normalizeDoc(input: any): Doc | null {
     machineId: String(rs.machineId || DEFAULT_SETTINGS.machineId),
     materialId: String(rs.materialId || DEFAULT_SETTINGS.materialId),
   };
+  const rawGroups = Array.isArray(input.groups) ? input.groups.slice(0, 200) : [];
+  const usedParts = new Set<string>();
+  const groups: Assembly[] = [];
+  for (const raw of rawGroups) {
+    if (!raw || !Array.isArray(raw.members)) continue;
+    const members = raw.members
+      .filter((m: any) => m && ids.has(String(m.partId)) && !usedParts.has(String(m.partId)))
+      .map((m: any) => ({ partId: String(m.partId), dx: Number(m.dx) || 0, dy: Number(m.dy) || 0 }));
+    if (members.length < 2) continue;
+    for (const m of members) usedParts.add(m.partId);
+    groups.push({
+      id: String(raw.id || `asm-${groups.length}`),
+      name: String(raw.name || `Grupo ${groups.length + 1}`),
+      members,
+      copies: Math.max(1, Math.min(999, Math.round(Number(raw.copies) || 1))),
+      color: typeof raw.color === "string" ? raw.color : undefined,
+    });
+  }
+  const groupIds = new Set(groups.map((g) => g.id));
+  const partGroup = new Map<string, string>();
+  for (const g of groups) for (const m of g.members) partGroup.set(m.partId, g.id);
+  for (const p of parts) {
+    const gid = partGroup.get(p.id) || (p.assemblyId && groupIds.has(p.assemblyId) ? p.assemblyId : undefined);
+    if (gid) {
+      p.assemblyId = gid;
+      p.copies = 1;
+    } else {
+      p.assemblyId = undefined;
+    }
+  }
+  for (const pl of placements) {
+    if (pl.assemblyId && !groupIds.has(pl.assemblyId)) pl.assemblyId = undefined;
+  }
   return {
     version: 1,
     name: String(input.name || "Proyecto"),
     parts,
     placements,
+    groups,
     sheet,
     settings,
     createdAt: Number(input.createdAt) || now(),

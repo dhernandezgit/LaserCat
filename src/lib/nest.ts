@@ -59,7 +59,7 @@ interface Instance {
 }
 
 interface GridSheet {
-  cells: Uint8Array;
+  cells: Uint16Array;
   gw: number;
   gh: number;
 }
@@ -215,6 +215,8 @@ function placeRun(
   sheetsAllowed: number,
   pinned: PinnedRaster[],
   pinnedArea: number,
+  compact: boolean,
+  budgetEnd: number,
 ): RunResult {
   const gw = Math.max(1, Math.floor(sheetW / cell));
   const gh = Math.max(1, Math.floor(sheetH / cell));
@@ -224,7 +226,7 @@ function placeRun(
   let usedArea = pinnedArea;
 
   const ensureSheet = (index: number): GridSheet => {
-    while (sheets.length <= index) sheets.push({ cells: new Uint8Array(gw * gh), gw, gh });
+    while (sheets.length <= index) sheets.push({ cells: new Uint16Array(gw * gh), gw, gh });
     return sheets[index];
   };
   const maxPinnedPage = pinned.reduce((m, p) => Math.max(m, p.page), -1);
@@ -255,7 +257,19 @@ function placeRun(
       const dy = (idx / rot.fullW) | 0;
       const x = sx + dx;
       const y = sy + dy;
-      if (x >= 0 && y >= 0 && x < sheet.gw && y < sheet.gh) sheet.cells[y * sheet.gw + x] = 1;
+      if (x >= 0 && y >= 0 && x < sheet.gw && y < sheet.gh) sheet.cells[y * sheet.gw + x] += 1;
+    }
+  };
+
+  const unmark = (sheet: GridSheet, rot: RotShape, sx: number, sy: number) => {
+    const list = rot.bitsList;
+    for (let k = 0; k < list.length; k++) {
+      const idx = list[k];
+      const dx = idx % rot.fullW;
+      const dy = (idx / rot.fullW) | 0;
+      const x = sx + dx;
+      const y = sy + dy;
+      if (x >= 0 && y >= 0 && x < sheet.gw && y < sheet.gh) sheet.cells[y * sheet.gw + x] = Math.max(0, sheet.cells[y * sheet.gw + x] - 1);
     }
   };
 
@@ -327,6 +341,34 @@ function placeRun(
   }
 
   const pages = sheets.length;
+  if (compact) {
+    // Empuja cada pieza hacia arriba/izquierda sin mover las fijadas.
+    for (let s = 0; s < sheets.length; s++) {
+      const sheet = sheets[s];
+      const list = placements.filter((p) => p.sheet === s);
+      for (let pass = 0; pass < 2; pass++) {
+        if (Date.now() > budgetEnd) break;
+        list.sort((a, b) => b.gy - a.gy || b.gx - a.gx);
+        let movedAny = false;
+        for (const p of list) {
+          if (Date.now() > budgetEnd) break;
+          const rot = p.rot;
+          let sx = p.gx - rot.pad;
+          let sy = p.gy - rot.pad;
+          unmark(sheet, rot, sx, sy);
+          let moved = false;
+          while (sy > -rot.pad && fits(sheet, rot, sx, sy - 1)) { sy--; moved = true; }
+          while (sx > -rot.pad && fits(sheet, rot, sx - 1, sy)) { sx--; moved = true; }
+          while (sy > -rot.pad && fits(sheet, rot, sx, sy - 1)) { sy--; moved = true; }
+          mark(sheet, rot, sx, sy);
+          p.gx = sx + rot.pad;
+          p.gy = sy + rot.pad;
+          if (moved) movedAny = true;
+        }
+        if (!movedAny) break;
+      }
+    }
+  }
   const usable = sheetW * sheetH;
   const efficiency = pages > 0 ? usedArea / (usable * pages) : 0;
   let bboxArea = 0;
@@ -380,13 +422,14 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const sheetsAllowed = sheet.singlePage ? 1 : 999;
   const budgetEnd = started + QUALITY_BUDGET[options.quality];
   const radius = Math.max(0, Math.ceil((sheet.spacing + sheet.kerf) / 2 / cell));
-  const angles = anglesFor(options.rotation, options.quality);
+  const defaultAngles = anglesFor(options.rotation, options.quality);
 
   const instances: Instance[] = [];
   const rotationCache: RotShape[][] = [];
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
     if (!p.contours.length || p.width <= 0 || p.height <= 0 || p.copies <= 0) continue;
+    const angles = p.angles && p.angles.length ? p.angles : defaultAngles;
     const rots: RotShape[] = [];
     for (const a of angles) {
       const r = buildRotation(p.contours, a, cell, radius);
@@ -429,7 +472,18 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   for (let run = 0; run < runs; run++) {
     if (run > 0 && Date.now() > budgetEnd) break;
     const ordered = ordering(instances, run, rand);
-    const res = placeRun(ordered, rotationCache, usableW, usableH, cell, sheetsAllowed, pinned, pinnedArea);
+    const res = placeRun(
+      ordered,
+      rotationCache,
+      usableW,
+      usableH,
+      cell,
+      sheetsAllowed,
+      pinned,
+      pinnedArea,
+      options.quality !== "rapida" && pinned.length === 0,
+      budgetEnd,
+    );
     if (!bestRun || res.score < bestRun.score) bestRun = res;
   }
   if (!bestRun) {

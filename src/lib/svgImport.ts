@@ -8,7 +8,7 @@
  * separa en 40 piezas, pero las partes de un mismo icono siguen juntas.
  */
 
-import type { Contour, Pt, SvgFillRule } from "../types";
+import type { Bounds, Contour, Operation, Pt, RasterData, SvgFillRule } from "../types";
 import { cleanContours, differenceContours, strokeOutline, unionContours } from "./clipper";
 import {
   boundsGap,
@@ -20,6 +20,7 @@ import {
   distancePointToSegment,
   fmt,
   pointInContour,
+  rectContour,
   simplifyRDP,
 } from "./geom";
 
@@ -62,10 +63,21 @@ export interface ImportedPart {
   /** Contornos en su posición original del SVG (para el mapa de piezas). */
   sourceContours: Contour[];
   sourceBounds: { x: number; y: number; w: number; h: number };
+  kind: "vector" | "raster";
+  raster?: RasterData;
+  operation?: Operation;
+}
+
+export interface ImportedGroup {
+  id: string;
+  name: string;
+  memberIds: string[];
+  color?: string;
 }
 
 export interface SvgImportResult {
   parts: ImportedPart[];
+  groups: ImportedGroup[];
   islands: ImportIsland[];
   widthMm: number;
   heightMm: number;
@@ -75,6 +87,7 @@ export interface SvgImportResult {
   units: "mm" | "cm" | "in" | "pt" | "px" | "viewbox";
   elementCount: number;
   textCount: number;
+  scale: number;
 }
 
 const PALETTE = [
@@ -114,6 +127,36 @@ interface RawShape {
   groupLabel?: string;
   index: number;
   negative: boolean;
+}
+
+interface RawImage {
+  dataUrl: string;
+  label: string;
+  elementId: string;
+  chain: string[];
+  labels: Record<string, string>;
+  bbox: Bounds;
+  index: number;
+}
+
+/** Lee ancho/alto de un PNG en data URL sin decodificar toda la imagen. */
+function pngPixelSize(dataUrl: string): { w: number; h: number } | null {
+  try {
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0 || !/^data:image\/png;base64,/i.test(dataUrl.slice(0, comma + 1))) return null;
+    const head = dataUrl.slice(comma + 1, comma + 80);
+    const bin = atob(head);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (bytes.length < 24) return null;
+    if (!(bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)) return null;
+    const w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    const h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    if (!w || !h) return null;
+    return { w, h };
+  } catch {
+    return null;
+  }
 }
 
 /** ¿El relleno es blanco (o casi)? Un blanco interior suele ser un hueco. */
@@ -777,6 +820,7 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
   };
 
   const rawShapes: RawShape[] = [];
+  const rawImages: RawImage[] = [];
   const labels: Record<string, string> = {};
   let groupCount = 0;
   let textCount = 0;
@@ -794,14 +838,50 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
       textCount++;
       return;
     }
-    if (tag === "image") {
-      warnings.push("Las imágenes dentro del SVG no se importan aquí; usa la pestaña Imagen.");
-      return;
-    }
     const style = inheritedStyle(el, inherited);
     const elChain = chain;
     const elLabel = groupLabel;
     const local = mul(parentMatrix, parseTransform(el.getAttribute("transform")));
+
+    if (tag === "image") {
+      const href =
+        el.getAttribute("href") ||
+        el.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+        el.getAttribute("xlink:href") ||
+        "";
+      if (!/^data:image\//i.test(href)) {
+        warnings.push("Una imagen del SVG no está incrustada (data URL) y no se puede importar.");
+        return;
+      }
+      const num = (name: string, fallback = 0) => {
+        const v = parseFloat(el.getAttribute(name) || "");
+        return Number.isFinite(v) ? v : fallback;
+      };
+      const x = num("x");
+      const y = num("y");
+      const w = num("width");
+      const h = num("height");
+      if (w <= 0 || h <= 0) return;
+      const corners = [
+        apply(local, { x, y }),
+        apply(local, { x: x + w, y }),
+        apply(local, { x: x + w, y: y + h }),
+        apply(local, { x, y: y + h }),
+      ];
+      const bbox = boundsOf(corners);
+      if (bbox.w < 0.05 || bbox.h < 0.05) return;
+      elementCount++;
+      rawImages.push({
+        dataUrl: href,
+        label: labelOf(el) || el.getAttribute("id") || "",
+        elementId: el.getAttribute("id") || `image${rawImages.length}`,
+        chain: elChain,
+        labels,
+        bbox,
+        index: shapeIndex++,
+      });
+      return;
+    }
 
     if (tag === "g" || tag === "svg" || tag === "symbol" || tag === "a" || tag === "switch") {
       const id = el.getAttribute("id") || `g${groupCount}`;
@@ -879,15 +959,16 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
   const rootStyle: Style = { fill: "#000000", stroke: "none", strokeWidth: 1, fillRule: "nonzero", opacity: 1 };
   walk(root, rootMatrix, [], "", rootStyle, 0);
 
-  if (!rawShapes.length) {
+  if (!rawShapes.length && !rawImages.length) {
     throw new Error(
       textCount
         ? "El SVG solo contiene texto. Convierte el texto a trazados en tu editor y vuelve a importar."
         : "No se encontró geometría importable en el SVG.",
     );
   }
-  if (groupCount === 0) warnings.push("El SVG no tenía grupos; se agruparon las piezas por cercanía.");
+  if (groupCount === 0 && rawImages.length === 0) warnings.push("El SVG no tenía grupos; se agruparon las piezas por cercanía.");
   if (textCount) warnings.push(`${textCount} texto(s) ignorados: conviértelos a trazados antes de exportar.`);
+  if (rawImages.length) warnings.push(`${rawImages.length} imagen(es) incrustadas detectadas; se importarán como grabado.`);
 
   // 1) islas por elemento
   const islands: ImportIsland[] = [];
@@ -911,21 +992,88 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
       });
     }
   }
-  if (!islands.length) throw new Error("El SVG no contiene formas cerradas utilizables.");
+  if (!islands.length && !rawImages.length) throw new Error("El SVG no contiene formas cerradas utilizables.");
 
-  // 2) agrupar islas
-  const groups = groupIslandsSmart(islands, options);
+  // 2) agrupar islas. Si hay imágenes, cada isla se asigna primero a su figura.
+  rawImages.sort((a, b) => a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x);
+  const overlapArea = (a: Bounds, b: Bounds) => {
+    const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return w > 0 && h > 0 ? w * h : 0;
+  };
+  const assignedByImage: ImportIsland[][] = rawImages.map(() => []);
+  const assignedIslandIds = new Set<string>();
+  if (rawImages.length && options.mode !== "formas") {
+    for (const island of islands) {
+      let best = -1;
+      let bestScore = 0;
+      for (let i = 0; i < rawImages.length; i++) {
+        const ab = rawImages[i].bbox;
+        const center = { x: island.bbox.x + island.bbox.w / 2, y: island.bbox.y + island.bbox.h / 2 };
+        const contains =
+          center.x >= ab.x - 0.6 &&
+          center.x <= ab.x + ab.w + 0.6 &&
+          center.y >= ab.y - 0.6 &&
+          center.y <= ab.y + ab.h + 0.6;
+        const overlap = overlapArea(island.bbox, ab);
+        const ratio = overlap / Math.max(0.01, island.bbox.w * island.bbox.h);
+        const score = contains ? 1e6 + overlap : ratio;
+        if (score > bestScore) {
+          bestScore = score;
+          best = i;
+        }
+      }
+      if (best < 0) {
+        let bestGap = Infinity;
+        for (let i = 0; i < rawImages.length; i++) {
+          const gap = boundsGap(island.bbox, rawImages[i].bbox);
+          if (gap < bestGap) {
+            bestGap = gap;
+            best = i;
+          }
+        }
+        if (bestGap > 8) best = -1;
+      }
+      if (best >= 0) {
+        assignedByImage[best].push(island);
+        assignedIslandIds.add(island.id);
+      }
+    }
+  }
+
+  let islandGroups: IslandGroup[];
+  if (rawImages.length && options.mode !== "formas") {
+    // Cada pieza de corte se mantiene separada dentro de su figura. Así una
+    // puerta, una ranura y su imagen no se fusionan en una sola geometría.
+    const perIsland: IslandGroup[] = [];
+    for (const arr of assignedByImage) {
+      for (const island of arr) perIsland.push({ islands: [island] });
+    }
+    const leftover = islands.filter((i) => !assignedIslandIds.has(i.id));
+    islandGroups = leftover.length
+      ? [...perIsland, ...groupIslandsSmart(leftover, options)]
+      : perIsland;
+  } else {
+    islandGroups = groupIslandsSmart(islands, options);
+  }
 
   // 3) contornos finales y escala
   const made: ImportedPart[] = [];
-  let allBounds = boundsOf(islands.flatMap((i) => i.contours.flat()));
+  const allPoints: Pt[] = islands.flatMap((i) => i.contours.flat());
+  for (const img of rawImages) {
+    allPoints.push(
+      { x: img.bbox.x, y: img.bbox.y },
+      { x: img.bbox.x + img.bbox.w, y: img.bbox.y + img.bbox.h },
+    );
+  }
+  const allBounds = boundsOf(allPoints);
   const naturalW = allBounds.w || 1;
   const naturalH = allBounds.h || 1;
   let factor = 1;
   if (options.targetWidth && options.targetWidth > 0) factor = options.targetWidth / naturalW;
   else if (options.targetHeight && options.targetHeight > 0) factor = options.targetHeight / naturalH;
 
-  for (const islandGroup of groups) {
+  for (const islandGroup of islandGroups) {
     const source = islandGroup.islands;
     const positives = source.filter((i) => !i.negative);
     if (!positives.length) continue;
@@ -953,7 +1101,89 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
       color: PALETTE[made.length % PALETTE.length],
       sourceContours: contours,
       sourceBounds: b,
+      kind: "vector",
+      operation: "cut",
     });
+  }
+
+  // 4) imágenes incrustadas → piezas raster de grabado
+  const vectorParts = made.slice();
+  const imageParts: ImportedPart[] = [];
+  for (let i = 0; i < rawImages.length; i++) {
+    const img = rawImages[i];
+    const name = img.label && !/^(image|imagen|figura)\s*\d*$/i.test(img.label)
+      ? img.label
+      : `Figura ${i + 1}`;
+    const px = pngPixelSize(img.dataUrl);
+    const width = img.bbox.w * factor;
+    const height = img.bbox.h * factor;
+    const raster: RasterData = {
+      dataUrl: img.dataUrl,
+      width: px?.w || Math.max(1, Math.round(width * (300 / 25.4))),
+      height: px?.h || Math.max(1, Math.round(height * (300 / 25.4))),
+      dpi: px && img.bbox.w > 0 ? (px.w * 25.4) / img.bbox.w : 300,
+      mode: "grayscale",
+      threshold: 128,
+      invert: false,
+    };
+    imageParts.push({
+      id: `part-img-${i}`,
+      name,
+      contours: [],
+      width,
+      height,
+      islandIds: [],
+      color: PALETTE[(vectorParts.length + i) % PALETTE.length],
+      sourceContours: [rectContour(img.bbox.x, img.bbox.y, img.bbox.w, img.bbox.h)],
+      sourceBounds: img.bbox,
+      kind: "raster",
+      raster,
+      operation: "engrave",
+      groupLabel: name,
+    });
+  }
+  made.push(...imageParts);
+
+  // 5) agrupaciones automáticas: cada imagen grande "engloba" sus piezas
+  const assemblies: ImportedGroup[] = [];
+  if (imageParts.length && options.mode !== "formas") {
+    if (options.mode === "todo") {
+      if (made.length > 1) {
+        assemblies.push({
+          id: "grp-todo",
+          name: "Figura completa",
+          memberIds: made.map((p) => p.id),
+          color: PALETTE[0],
+        });
+      }
+    } else {
+      const islandToPart = new Map<string, ImportedPart>();
+      for (const part of vectorParts) {
+        for (const islandId of part.islandIds) islandToPart.set(islandId, part);
+      }
+      for (let i = 0; i < imageParts.length; i++) {
+        const members = imageParts[i].id ? [imageParts[i].id] : [];
+        for (const island of assignedByImage[i]) {
+          const part = islandToPart.get(island.id);
+          if (part && !members.includes(part.id)) members.push(part.id);
+        }
+        if (!members.length) continue;
+        // Nombres legibles para las piezas de corte de la figura.
+        let cutNo = 0;
+        for (const id of members) {
+          const part = made.find((p) => p.id === id);
+          if (part && part.kind === "vector" && /^shape\d*$/i.test(part.name)) {
+            part.name = `Corte ${++cutNo}`;
+          }
+        }
+        assemblies.push({
+          id: `grp-img-${i}`,
+          name: imageParts[i].name,
+          memberIds: members,
+          color: PALETTE[i % PALETTE.length],
+        });
+      }
+    }
   }
 
   if (!made.length) throw new Error("No quedaron piezas tras agrupar.");
@@ -966,15 +1196,17 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
 
   return {
     parts: made,
+    groups: assemblies,
     islands,
     widthMm: naturalW * factor,
     heightMm: naturalH * factor,
     warnings,
-    hasGroups: groupCount > 0,
-    groupCount,
+    hasGroups: groupCount > 0 || assemblies.length > 0,
+    groupCount: groupCount + assemblies.length,
     units,
     elementCount,
     textCount,
+    scale: factor,
   };
 }
 
@@ -1095,9 +1327,11 @@ export function closestPairs(
 /** Une varias piezas de la previsualización del importador. */
 export function mergeImported(parts: ImportedPart[], indices: number[]): ImportedPart {
   const chosen = indices.map((i) => parts[i]).filter(Boolean);
-  const sourceContours = unionContours([chosen.flatMap((p) => p.sourceContours || p.contours)]);
+  const vector = chosen.filter((p) => p.kind !== "raster");
+  const sourceChosen = vector.length ? vector : chosen;
+  const sourceContours = unionContours([sourceChosen.flatMap((p) => p.sourceContours || p.contours)]);
   const sourceBounds = contoursBounds(sourceContours);
-  const contours = unionContours([chosen.flatMap((p) => p.contours)]);
+  const contours = unionContours([vector.flatMap((p) => p.contours)]);
   const b = contoursBounds(contours);
   return {
     id: chosen[0]?.id || `merged-${Date.now()}`,
@@ -1109,6 +1343,8 @@ export function mergeImported(parts: ImportedPart[], indices: number[]): Importe
     color: chosen[0]?.color,
     sourceContours,
     sourceBounds,
+    kind: "vector",
+    operation: chosen[0]?.operation || "cut",
   };
 }
 
@@ -1127,6 +1363,8 @@ export function splitImported(part: ImportedPart, islands: ImportIsland[]): Impo
       color: PALETTE[(partsColorIndex(part) + idx) % PALETTE.length],
       sourceContours: island.contours,
       sourceBounds: island.bbox,
+      kind: "vector",
+      operation: part.operation || "cut",
     };
   });
 }
@@ -1137,6 +1375,9 @@ function partsColorIndex(part: ImportedPart): number {
 
 /** Mini SVG de una pieza para las tarjetas del importador. */
 export function partPreviewSvg(part: ImportedPart, size = 72): string {
+  if (part.kind === "raster" && part.raster) {
+    return `<img src="${part.raster.dataUrl}" width="${size}" height="${size}" style="object-fit:contain;width:100%;height:100%" alt=""/>`;
+  }
   const b = boundsOf(part.contours.flat());
   const pad = Math.max(b.w, b.h) * 0.06 + 0.4;
   const vb = `${b.x - pad} ${b.y - pad} ${b.w + pad * 2} ${b.h + pad * 2}`;
@@ -1144,4 +1385,35 @@ export function partPreviewSvg(part: ImportedPart, size = 72): string {
     .map((c) => `M${c.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join("L")}Z`)
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${size}" height="${size}"><path d="${d}" fill="${part.color || "#8a5a2b"}" fill-rule="evenodd" opacity=".85"/></svg>`;
+}
+
+/** Vista completa de un grupo (imágenes + cortes) en su posición original. */
+export function groupPreviewSvg(parts: ImportedPart[], size = 96): string {
+  const members = parts.filter((p) => p);
+  if (!members.length) return "";
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (const p of members) {
+    xs.push(p.sourceBounds.x, p.sourceBounds.x + p.sourceBounds.w);
+    ys.push(p.sourceBounds.y, p.sourceBounds.y + p.sourceBounds.h);
+  }
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const w = Math.max(0.1, maxX - minX);
+  const h = Math.max(0.1, maxY - minY);
+  const pad = Math.max(w, h) * 0.04 + 0.4;
+  let body = "";
+  for (const p of members) {
+    if (p.kind === "raster" && p.raster) {
+      body += `<image x="${fmt(p.sourceBounds.x)}" y="${fmt(p.sourceBounds.y)}" width="${fmt(p.sourceBounds.w)}" height="${fmt(p.sourceBounds.h)}" preserveAspectRatio="none" href="${p.raster.dataUrl}"/>`;
+    } else {
+      const d = p.sourceContours
+        .map((c) => `M${c.map((q) => `${fmt(q.x)} ${fmt(q.y)}`).join("L")}Z`)
+        .join("");
+      body += `<path d="${d}" fill="${p.color || "#8a5a2b"}" fill-rule="evenodd" opacity=".45" stroke="${p.color || "#6b4625"}" stroke-width="${Math.max(w, h) * 0.002}"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet">${body}</svg>`;
 }

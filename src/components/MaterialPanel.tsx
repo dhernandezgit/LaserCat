@@ -2,20 +2,23 @@ import { useMemo, useState } from "react";
 import type { Dispatch } from "react";
 import type { Doc } from "../types";
 import type { Action } from "../lib/store";
-import { SPECIES, SPECIES_BY_ID } from "../lib/wood";
+import { SPECIES, SPECIES_BY_ID, BURN_TONES } from "../lib/wood";
 import { laserPresetFor, MATERIAL_BY_ID, MACHINE_BY_ID } from "../lib/laser";
 import { buildTestCard, testCardReadme, type TestCard } from "../lib/testcard";
 import { makeZip, svgToDataUrl } from "../lib/export";
 import { downloadBytes, safeFileName } from "../lib/download";
 import { Button, Field, Slider, Toggle, Badge, Icon } from "./UI";
 import { WoodGallery } from "./WoodCanvas";
+import { WoodCompareDialog } from "./WoodCompareDialog";
 
 export function MaterialPanel({ doc, dispatch }: { doc: Doc; dispatch: Dispatch<Action> }) {
   const [testCard, setTestCard] = useState<TestCard | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
   const set = (patch: Partial<typeof doc.settings>) => dispatch({ type: "SET_SETTINGS", patch });
   const options = useMemo(
     () => ({
       speciesId: doc.settings.previewSpecies,
+      burnTone: doc.settings.previewBurnTone,
       power: doc.settings.previewPower,
       speed: doc.settings.previewSpeed,
       passes: doc.settings.previewPasses,
@@ -23,7 +26,7 @@ export function MaterialPanel({ doc, dispatch }: { doc: Doc; dispatch: Dispatch<
       showEngrave: true,
       showGuides: true,
     }),
-    [doc.settings.previewSpecies, doc.settings.previewPower, doc.settings.previewSpeed, doc.settings.previewPasses],
+    [doc.settings.previewSpecies, doc.settings.previewBurnTone, doc.settings.previewPower, doc.settings.previewSpeed, doc.settings.previewPasses],
   );
   const sp = SPECIES_BY_ID[doc.settings.previewSpecies] || SPECIES[0];
   const material = MATERIAL_BY_ID[doc.settings.materialId] || MATERIAL_BY_ID.tilo;
@@ -57,6 +60,24 @@ export function MaterialPanel({ doc, dispatch }: { doc: Doc; dispatch: Dispatch<
             <span>{s.name}</span>
           </button>
         ))}
+      </div>
+
+      <div className="tone-row">
+        <span className="tone-label">Tono del láser</span>
+        <div className="tone-swatches">
+          {BURN_TONES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`tone-swatch ${doc.settings.previewBurnTone === t.id ? "active" : ""}`}
+              title={t.name}
+              onClick={() => set({ previewBurnTone: t.id })}
+            >
+              <i style={{ background: t.color }} />
+              <span>{t.name}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="preview-controls">
@@ -94,12 +115,16 @@ export function MaterialPanel({ doc, dispatch }: { doc: Doc; dispatch: Dispatch<
           Ver a lo grande
         </Button>
         <Button variant="secondary" icon="engrave" onClick={() => set({ previewPower: eng.power, previewSpeed: eng.speed, previewPasses: eng.passes })}>
-          Ajustes del material
+          Ajustes
         </Button>
       </div>
 
       <div className="section-label">Diferentes intensidades · {sp.name}</div>
       <WoodGallery doc={doc} base={options} />
+
+      <Button variant="secondary" icon="grid" className="wide" onClick={() => setCompareOpen(true)}>
+        Comparar 4 maderas × 4 intensidades
+      </Button>
 
       <div className="testcard-box">
         <div className="section-head">
@@ -165,6 +190,13 @@ export function MaterialPanel({ doc, dispatch }: { doc: Doc; dispatch: Dispatch<
           <span><b>{eng.interval}</b> mm intervalo</span>
         </div>
       </div>
+
+      <WoodCompareDialog
+        open={compareOpen}
+        doc={doc}
+        options={options}
+        onClose={() => setCompareOpen(false)}
+      />
     </div>
   );
 }

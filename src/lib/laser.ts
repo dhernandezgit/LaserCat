@@ -10,7 +10,7 @@ import type {
   Placement,
   SheetStats,
 } from "../types";
-import { offsetContours, normalizeOrientation } from "./clipper";
+import { offsetContours, normalizeOrientation, unionContours, clipperArea } from "./clipper";
 import {
   contoursBounds,
   contourArea,
@@ -405,13 +405,31 @@ export function computeStats(doc: Doc): SheetStats {
   const pages = Math.max(1, ...doc.placements.map((p) => p.page + 1));
   const usableW = Math.max(1, doc.sheet.width - doc.sheet.margin * 2);
   const usableH = Math.max(1, doc.sheet.height - doc.sheet.margin * 2);
+  const groups = doc.groups || [];
+  const groupedPartIds = new Set<string>();
   let used = 0;
+  for (const group of groups) {
+    const members = group.members
+      .map((m) => {
+        const part = byId.get(m.partId);
+        if (!part) return null;
+        groupedPartIds.add(part.id);
+        return { m, part };
+      })
+      .filter(Boolean) as { m: { partId: string; dx: number; dy: number }; part: Part }[];
+    if (!members.length) continue;
+    const all = members.flatMap(({ m, part }) =>
+      translateContours(effectiveGeometry(part).outer, m.dx, m.dy),
+    );
+    const contours = unionContours([all]);
+    used += clipperArea(contours) * Math.max(1, group.copies);
+  }
   let cutLength = 0;
   let engraveArea = 0;
   for (const pl of doc.placements) {
     const part = byId.get(pl.partId);
     if (!part) continue;
-    used += partOuterArea(part);
+    if (!groupedPartIds.has(part.id)) used += partOuterArea(part);
     const g = effectiveGeometry(part);
     if (part.operation === "cut") cutLength += contoursLength(g.outer);
     else if (part.operation === "score") cutLength += contoursLength(g.base);

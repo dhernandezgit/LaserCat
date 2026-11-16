@@ -45,15 +45,15 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                 funciona con cualquier láser.
               </p>
               <div className="help-steps">
-                <div><span>1</span><b>Importa</b><p>Arrastra un SVG o una imagen. LaserCat detecta grupos, islas y agujeros.</p></div>
-                <div><span>2</span><b>Ordena</b><p>Revisa el mapa de piezas, une lo que forme un dibujo y separa lo que no.</p></div>
+                <div><span>1</span><b>Importa</b><p>Arrastra un SVG o una imagen. Las imágenes grandes del SVG se convierten en figuras que engloban sus cortes.</p></div>
+                <div><span>2</span><b>Ordena</b><p>Revisa Grupos, Piezas, Mapa y Parejas. Renombra, agrupa o separa antes de añadir.</p></div>
                 <div><span>3</span><b>Ajusta</b><p>Elige plancha (30×30 cm por defecto), margen de 5 mm, separación y kerf.</p></div>
-                <div><span>4</span><b>Previsualiza</b><p>Cambia de madera e intensidad para ver cómo quedará antes de quemar.</p></div>
+                <div><span>4</span><b>Previsualiza</b><p>Cambia de madera, tono e intensidad para ver cómo quedará antes de quemar.</p></div>
                 <div><span>5</span><b>Exporta</b><p>Descarga los SVG por capas y el ZIP con instrucciones para LightBurn.</p></div>
               </div>
               <div className="help-note">
                 <Icon name="info" size={16} />
-                <p>La plancha inicial es de 300×300 mm con 5 mm de margen. Se puede cambiar a cualquier medida en la pestaña Plancha.</p>
+                <p>La plancha inicial es de 300×300 mm con 5 mm de margen. Se puede cambiar en <b>Plancha</b>. El tema <b>Eevee</b> es el predeterminado; cámbialo con el pincel de la cabecera.</p>
               </div>
             </>
           )}
@@ -62,6 +62,10 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
             <>
               <h2>Importar un SVG sin perder la cabeza</h2>
               <p>El importador separa primero cada forma en <b>islas</b>: un contorno exterior con sus agujeros. Después las agrupa por cercanía y por los grupos del archivo original.</p>
+              <div className="help-note">
+                <Icon name="image" size={16} />
+                <p><b>SVG con imágenes:</b> si el SVG lleva las imágenes <b>incrustadas</b> (data URL), se importan como grabado y la imagen grande se convierte en el ancla de una <b>figura</b>. Sus cortes, ranuras y puertas se agrupan a su alrededor. Las imágenes enlazadas desde fuera no se pueden leer.</p>
+              </div>
               <div className="help-cols">
                 <div>
                   <h3>Qué detecta</h3>
@@ -69,6 +73,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                     <li>Un solo <code>&lt;path&gt;</code> con 40 iconos → 40 piezas.</li>
                     <li>Ojos, letras o detalles dentro de una silueta → agujeros, no piezas sueltas.</li>
                     <li>Grupos de Inkscape e Illustrator → se respetan como pistas.</li>
+                    <li>Imágenes incrustadas → grabado + figura automática.</li>
                     <li>Trazos sin relleno → contorno de corte del grosor del trazo.</li>
                     <li>Unidades mm, cm, pulgadas, puntos y viewBox.</li>
                   </ul>
@@ -77,10 +82,10 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                   <h3>Si algo sale mal</h3>
                   <ul>
                     <li>Baja <b>Cercanía</b> para separar más.</li>
-                    <li>Sube <b>Cercanía</b> o usa <b>Unir</b> para juntar.</li>
-                    <li>La pestaña <b>Mapa</b> muestra las piezas en su sitio original.</li>
-                    <li>La pestaña <b>Parejas</b> dice qué está más cerca y a qué distancia.</li>
-                    <li><b>Separar</b> deshace una agrupación automática.</li>
+                    <li>Sube <b>Cercanía</b> o usa <b>Fusionar</b> para unir geometrías.</li>
+                    <li><b>Grupos</b> muestra cada figura; puedes renombrarla, cambiar copias, separar o quitar miembros.</li>
+                    <li><b>Mapa</b> muestra las piezas y los recuadros de cada figura en su sitio original.</li>
+                    <li>En <b>Piezas</b>, selecciona varias y pulsa <b>Agrupar</b> para crear una figura manual.</li>
                   </ul>
                 </div>
               </div>
@@ -89,6 +94,8 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                 <p>El texto SVG no se convierte a trazados. Convierte los textos a curvas en tu editor antes de importar.</p>
               </div>
               <p className="micro-help">Los ajustes manuales se conservan mientras el número de piezas no cambie; si cambias la escala o el modo de agrupación, se recalcula la separación.</p>
+              <h3>Guardar una figura con sus imágenes</h3>
+              <p>En la tarjeta de una figura pulsa el <b>disquete</b>, o en el inspector usa <b>Guardar «nombre»</b>. Se guarda en la <b>Biblioteca de figuras</b> y descarga un <code>.lasercat-group.json</code> con las imágenes dentro. <b>Exportar figura para LightBurn (ZIP)</b> genera un SVG por capas con las imágenes incrustadas, los PNG, el CSV y el LEEME.</p>
             </>
           )}
 
@@ -140,7 +147,11 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                 <li><b>Puentes:</b> pestañas que evitan que la pieza salte.</li>
                 <li><b>Orden:</b> recorridos ordenados por cercanía.</li>
                 <li><b>Capas:</b> grabado antes que corte, para que la pieza no se mueva.</li>
+                <li><b>Figuras:</b> se anidan como una unidad, con compactación posterior y rotación si cabe.</li>
               </ul>
+              <h3>Volver de LightBurn a LaserCat</h3>
+              <p>Para reimportar una figura con sus imágenes y grupos, exporta desde LightBurn un <b>SVG con las imágenes incrustadas</b> (no enlazadas). LaserCat lo lee y vuelve a crear la figura y sus cortes.</p>
+              <p className="micro-help">Si necesitas conservar capas, grupos e imágenes de forma nativa, el formato ideal es <code>.lbrn2</code>. Comparte un proyecto de ejemplo y añadimos el parser nativo; mientras tanto, el SVG con imágenes es el camino fiable.</p>
               <p className="micro-help">Los ajustes son un punto de partida para {machine.name} y {material.name}. Cada máquina y cada tablero cambia: haz siempre una prueba pequeña.</p>
             </>
           )}
@@ -172,6 +183,8 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                 <Icon name="flame" size={16} />
                 <p>Aire asistido encendido para corte, especialmente en DM, abedul y nogal. Limpia la lente y extrae el humo.</p>
               </div>
+              <h3>Tonos de quemado</h3>
+              <p>En <b>Material → Tono del láser</b> puedes simular el mismo trabajo en <b>miel, café, carbón, gris o rojizo</b>. El tono afecta a la simulación, no al archivo de corte; la potencia y la madera mandan en el resultado real.</p>
             </>
           )}
 
@@ -185,6 +198,7 @@ export function HelpDialog({ open, doc, onClose }: { open: boolean; doc: Doc; on
                 <div><kbd>Supr</kbd><span>Quitar de la plancha</span></div>
                 <div><kbd>R</kbd><span>Girar 90°</span></div>
                 <div><kbd>Mayús</kbd>+<kbd>R</kbd><span>Girar -90°</span></div>
+                <div><kbd>Ctrl</kbd>+<kbd>G</kbd><span>Agrupar selección</span></div>
                 <div><kbd>F</kbd><span>Encuadrar</span></div>
                 <div><kbd>Ctrl</kbd>+<kbd>A</kbd><span>Seleccionar todo</span></div>
                 <div><kbd>←↑↓→</kbd><span>Mover 1 mm (Mayús: 5)</span></div>

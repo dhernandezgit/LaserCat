@@ -103,13 +103,15 @@ export function Board({
     if (e.button !== 0) return;
     e.stopPropagation();
     const current = selection.placementIds;
+    const groupIds = pl.assemblyId
+      ? doc.placements.filter((p) => p.assemblyId === pl.assemblyId).map((p) => p.id)
+      : [pl.id];
     let ids: string[];
     if (e.shiftKey) {
-      ids = current.includes(pl.id) ? current.filter((x) => x !== pl.id) : [...current, pl.id];
-    } else if (current.includes(pl.id)) {
-      ids = current;
+      const allSelected = groupIds.every((id) => current.includes(id));
+      ids = allSelected ? current.filter((id) => !groupIds.includes(id)) : [...new Set([...current, ...groupIds])];
     } else {
-      ids = [pl.id];
+      ids = groupIds;
     }
     const partIds = Array.from(
       new Set(ids.map((id) => doc.placements.find((p) => p.id === id)?.partId).filter(Boolean) as string[]),

@@ -82,7 +82,13 @@ export function cleanContours(cs: Contour[], rule: SvgFillRule = "nonzero"): Con
 
 /** Área real (con huecos) de un conjunto normalizado. */
 export function clipperArea(cs: Contour[]): number {
-  return Math.abs(ClipperLib.Clipper.Area(toClipper(cs)) / (SCALE * SCALE));
+  let sum = 0;
+  for (const c of cs) {
+    const path = toClipper([c])[0];
+    if (!path) continue;
+    sum += ClipperLib.Clipper.Area(path);
+  }
+  return Math.abs(sum / (SCALE * SCALE));
 }
 
 /** Asegura exterior positivo y huecos negativos usando el árbol de Clipper. */

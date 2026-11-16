@@ -38,6 +38,7 @@ export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES
 
 export interface WoodPreviewOptions {
   speciesId: string;
+  burnTone?: string;
   power: number; // %
   speed: number; // mm/min
   passes: number;
@@ -46,8 +47,18 @@ export interface WoodPreviewOptions {
   showGuides: boolean;
 }
 
+/** Tonos de quemado del láser (independientes de la madera). */
+export const BURN_TONES = [
+  { id: "miel", name: "Miel", color: "#6b3d16" },
+  { id: "cafe", name: "Café", color: "#3a2312" },
+  { id: "carbon", name: "Carbón", color: "#1b1510" },
+  { id: "gris", name: "Gris", color: "#4b4a45" },
+  { id: "rojo", name: "Rojizo", color: "#6c2d1e" },
+];
+
 export const DEFAULT_PREVIEW: WoodPreviewOptions = {
   speciesId: "tilo",
+  burnTone: "miel",
   power: 35,
   speed: 3600,
   passes: 1,
@@ -259,6 +270,8 @@ export function renderWoodPreview(
   images: Map<string, HTMLImageElement> = new Map(),
 ): void {
   const sp = SPECIES_BY_ID[options.speciesId] || SPECIES[0];
+  const tone = BURN_TONES.find((t) => t.id === options.burnTone);
+  const charColor = tone?.color || sp.char;
   const W = canvas.width;
   const H = canvas.height;
   const ctx = canvas.getContext("2d")!;
@@ -288,7 +301,7 @@ export function renderWoodPreview(
   bctx.translate(offX, offY);
   bctx.scale(scale, scale);
   bctx.globalCompositeOperation = "source-over";
-  bctx.fillStyle = sp.char;
+  bctx.fillStyle = charColor;
 
   const partsById = new Map(doc.parts.map((p) => [p.id, p]));
   for (const pl of doc.placements.filter((p) => p.page === page)) {
@@ -298,7 +311,7 @@ export function renderWoodPreview(
     if (options.showEngrave && (part.operation === "engrave" || part.kind === "raster")) {
       if (part.kind === "raster") {
         const img = images.get(part.id);
-        const mask = img ? rasterMask(part, img, sp.char) : null;
+        const mask = img ? rasterMask(part, img, charColor) : null;
         if (mask) {
           const m = placed.matrix;
           bctx.save();
@@ -348,7 +361,7 @@ export function renderWoodPreview(
     ctx.save();
     ctx.translate(offX, offY);
     ctx.scale(scale, scale);
-    ctx.strokeStyle = sp.char;
+    ctx.strokeStyle = charColor;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (const pl of doc.placements.filter((p) => p.page === page)) {

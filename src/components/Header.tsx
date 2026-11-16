@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "react";
 import type { Doc } from "../types";
 import type { Action } from "../lib/store";
 import { downloadText, safeFileName } from "../lib/download";
+import { THEMES } from "../lib/themes";
 import { Button, Icon, IconButton } from "./UI";
 
 const TABS = [
@@ -42,6 +43,8 @@ export function Header({
   canRedo,
   saved,
   activeTab,
+  theme,
+  onTheme,
   onOpenProject,
   onExport,
   onHelp,
@@ -53,6 +56,8 @@ export function Header({
   canRedo: boolean;
   saved: boolean;
   activeTab: "diseno" | "plancha" | "grabado" | "material";
+  theme: string;
+  onTheme: (id: string) => void;
   onOpenProject: () => void;
   onExport: () => void;
   onHelp: () => void;
@@ -63,11 +68,22 @@ export function Header({
     downloadText(`${safeFileName(doc.name, "lasercat")}.json`, json, "application/json");
   };
 
+  const [themeOpen, setThemeOpen] = useState(false);
+  const themeRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!themeOpen) return;
+    const close = (e: MouseEvent) => {
+      if (themeRef.current && !themeRef.current.contains(e.target as Node)) setThemeOpen(false);
+    };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [themeOpen]);
+
   return (
     <header className="app-header">
       <div className="brand">
         <button type="button" className="brand-logo" onClick={onHelp} title="Acerca de LaserCat">
-          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
+          <img src={`${import.meta.env.BASE_URL}icon.png`} alt="LaserCat" />
         </button>
         <div className="brand-text">
           <div className="brand-line">
@@ -104,8 +120,33 @@ export function Header({
           <IconButton icon="undo" title="Deshacer (Ctrl+Z)" disabled={!canUndo} onClick={() => dispatch({ type: "UNDO" })} />
           <IconButton icon="redo" title="Rehacer (Ctrl+Shift+Z)" disabled={!canRedo} onClick={() => dispatch({ type: "REDO" })} />
         </div>
-        <IconButton icon="folder" title="Abrir proyecto (.json)" onClick={onOpenProject} />
+        <IconButton icon="folder" title="Abrir proyecto o figura (.json)" onClick={onOpenProject} />
         <IconButton icon="save" title="Descargar proyecto (.json)" onClick={saveProject} />
+        <div className="theme-picker" ref={themeRef}>
+          <IconButton icon="palette" title="Cambiar tema" active={themeOpen} onClick={() => setThemeOpen(!themeOpen)} />
+          {themeOpen && (
+            <div className="theme-menu">
+              <div className="theme-menu-title">Tema</div>
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`theme-option ${theme === t.id ? "active" : ""}`}
+                  onClick={() => { onTheme(t.id); setThemeOpen(false); }}
+                >
+                  <span className="theme-swatches">
+                    {t.swatch.map((c) => <i key={c} style={{ background: c }} />)}
+                  </span>
+                  <span className="theme-name">
+                    <b>{t.name}</b>
+                    <em>{t.description}</em>
+                  </span>
+                  {theme === t.id && <Icon name="check" size={14} />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <IconButton icon="help" title="Ayuda y guía LightBurn" onClick={onHelp} />
         <Button variant="primary" icon="download" size="md" className="export-btn" onClick={onExport}>
           Exportar

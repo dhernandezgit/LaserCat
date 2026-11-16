@@ -20,7 +20,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
     return (
       <div className="crash-screen">
         <div className="crash-card">
-          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" />
+          <img src={`${import.meta.env.BASE_URL}icon.png`} alt="LaserCat" />
           <h1>LaserCat se ha atascado</h1>
           <p>
             Ha ocurrido un error inesperado. Tu proyecto guardado en este navegador sigue ahí.

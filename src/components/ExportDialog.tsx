@@ -78,6 +78,7 @@ export function ExportDialog({
       }
       const wp: WoodPreviewOptions = {
         speciesId: doc.settings.previewSpecies,
+        burnTone: doc.settings.previewBurnTone,
         power: doc.settings.previewPower,
         speed: doc.settings.previewSpeed,
         passes: doc.settings.previewPasses,

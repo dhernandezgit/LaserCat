@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Dispatch } from "react";
-import type { Doc, Part, Placement, SelectionState } from "../types";
+import type { Assembly, Doc, Part, Placement, SelectionState } from "../types";
 import type { Action } from "../lib/store";
 import { fmt } from "../lib/geom";
 import {
@@ -11,6 +11,16 @@ import {
   MACHINE_BY_ID,
   MATERIAL_BY_ID,
 } from "../lib/laser";
+import { assemblyGeometry, getGroups } from "../lib/assembly";
+import {
+  buildGroupZip,
+  groupJson,
+  groupParts,
+  groupThumbnail,
+  notifyGroupsChanged,
+  saveGroupToLibrary,
+} from "../lib/groupLibrary";
+import { downloadBytes, downloadText, safeFileName } from "../lib/download";
 import { PartThumb } from "./PartThumb";
 import { Badge, Button, Icon, IconButton, NumberField, Progress, Segmented, Stepper, Toggle } from "./UI";
 
@@ -82,6 +92,16 @@ export function Inspector({
         ? doc.parts.find((p) => p.id === placement.partId) || null
         : null;
 
+  const group =
+    placements.length > 1 &&
+    placements.every((p) => p.assemblyId && p.assemblyId === placements[0].assemblyId)
+      ? getGroups(doc).find((g) => g.id === placements[0].assemblyId)
+      : undefined;
+
+  if (group) {
+    return <GroupInspector doc={doc} dispatch={dispatch} group={group} placements={placements} />;
+  }
+
   if (placements.length > 1) {
     const pinnedCount = placements.filter((p) => p.pinned).length;
     return (
@@ -115,9 +135,16 @@ export function Inspector({
             <Button
               variant="secondary"
               icon="rotate"
-              onClick={() => placements.forEach((p) => dispatch({ type: "ROTATE_PLACEMENT", id: p.id, delta: 90 }))}
+              onClick={() => dispatch({ type: "ROTATE_SELECTION", placementIds: placements.map((p) => p.id), delta: 90 })}
             >
               Girar 90°
+            </Button>
+            <Button
+              variant="secondary"
+              icon="shapes"
+              onClick={() => dispatch({ type: "GROUP_PLACEMENTS", placementIds: placements.map((p) => p.id), name: "Grupo" })}
+            >
+              Agrupar
             </Button>
             <Button
               variant="secondary"
@@ -357,6 +384,176 @@ export function Inspector({
             onChange={(e) => update({ notes: e.target.value })}
           />
         </Section>
+      </div>
+    </aside>
+  );
+}
+
+function GroupInspector({
+  doc,
+  dispatch,
+  group,
+  placements,
+}: {
+  doc: Doc;
+  dispatch: Dispatch<Action>;
+  group: Assembly;
+  placements: Placement[];
+}) {
+  const parts = groupParts(doc, group);
+  const geo = assemblyGeometry(group, parts);
+  const thumb = groupThumbnail(doc, group);
+  const pinned = placements.length > 0 && placements.every((p) => p.pinned);
+  const total = parts.length * Math.max(1, group.copies);
+
+  const saveFigure = () => {
+    const ok = saveGroupToLibrary(group, parts, thumb);
+    downloadText(
+      `${safeFileName(group.name, "figura")}.lasercat-group.json`,
+      groupJson(group, parts),
+      "application/json",
+    );
+    notifyGroupsChanged();
+    dispatch({
+      type: "TOAST",
+      text: ok
+        ? "Figura guardada con sus imágenes: biblioteca + JSON."
+        : "JSON descargado, pero la biblioteca local está llena.",
+      kind: ok ? "ok" : "warn",
+    });
+  };
+
+  const exportFigure = () => {
+    const bundle = buildGroupZip(doc, group);
+    if (!bundle) {
+      dispatch({ type: "TOAST", text: "No se pudo preparar la figura.", kind: "error" });
+      return;
+    }
+    downloadBytes(bundle.name, bundle.bytes);
+    dispatch({ type: "TOAST", text: "Figura exportada con SVG, imágenes y LEEME.", kind: "ok" });
+  };
+
+  return (
+    <aside className="inspector">
+      <div className="inspector-head">
+        <div className="inspector-part">
+          <div className="group-head-thumb">
+            {thumb ? <img src={thumb} alt="" /> : <Icon name="shapes" size={24} />}
+          </div>
+          <div>
+            <span className="eyebrow">Figura · {parts.length} piezas</span>
+            <h2>{group.name}</h2>
+          </div>
+        </div>
+        <div className="head-actions">
+          <IconButton
+            icon="copy"
+            title="Duplicar figura"
+            onClick={() => parts[0] && dispatch({ type: "DUPLICATE_PART", id: parts[0].id })}
+          />
+          <IconButton
+            icon="trash"
+            title="Eliminar figura"
+            onClick={() => dispatch({ type: "REMOVE_PARTS", ids: parts.map((p) => p.id) })}
+          />
+        </div>
+      </div>
+
+      <div className="inspector-body">
+        <Section title="Identidad">
+          <TextField
+            value={group.name}
+            onCommit={(v) => dispatch({ type: "RENAME_ASSEMBLY", id: group.id, name: v })}
+            ariaLabel="Nombre de la figura"
+          />
+          <div className="inline-pills">
+            <Badge kind="neutral">{fmt(geo.width)} × {fmt(geo.height)} mm</Badge>
+            <Badge kind="ok">{group.copies} copia{group.copies === 1 ? "" : "s"}</Badge>
+            {parts.some((p) => p.kind === "raster") && <Badge kind="engrave">con imagen</Badge>}
+          </div>
+          <div className="copy-row">
+            <span>Copias de la figura</span>
+            <Stepper
+              value={group.copies}
+              min={1}
+              max={99}
+              onChange={(v) => dispatch({ type: "SET_ASSEMBLY_COPIES", id: group.id, copies: v })}
+            />
+            <em>{placements.length} de {total} piezas colocadas</em>
+          </div>
+        </Section>
+
+        <Section title="Composición">
+          <div className="assembly-members">
+            {parts.map((part) => (
+              <div className="assembly-member" key={part.id}>
+                <PartThumb part={part} size={34} />
+                <div className="assembly-member-info">
+                  <b>{part.name}</b>
+                  <span>
+                    {part.kind === "raster" ? "Imagen de grabado" : `${fmt(part.width)} × ${fmt(part.height)} mm`}
+                  </span>
+                </div>
+                <select
+                  className="select mini"
+                  value={part.operation}
+                  disabled={part.kind === "raster"}
+                  onChange={(e) =>
+                    dispatch({
+                      type: "UPDATE_PART",
+                      id: part.id,
+                      patch: { operation: e.target.value as Part["operation"] },
+                    })
+                  }
+                >
+                  <option value="cut">Cortar</option>
+                  <option value="engrave">Grabar</option>
+                  <option value="score">Marcar</option>
+                </select>
+              </div>
+            ))}
+          </div>
+          <p className="micro-help">
+            La figura se mueve, gira y se anida como una unidad. Las imágenes se conservan al guardar y exportar.
+          </p>
+        </Section>
+
+        <Section title="Acciones">
+          <div className="action-grid">
+            <Button variant="secondary" icon="rotate" onClick={() => dispatch({ type: "ROTATE_ASSEMBLY", id: group.id, delta: 90 })}>
+              Girar 90°
+            </Button>
+            <Button variant="secondary" icon="rotate" className="flip" onClick={() => dispatch({ type: "ROTATE_ASSEMBLY", id: group.id, delta: -90 })}>
+              Girar −90°
+            </Button>
+            <Button variant="secondary" icon={pinned ? "unlock" : "pin"} onClick={() => dispatch({ type: "PIN_ASSEMBLY", id: group.id, pinned: !pinned })}>
+              {pinned ? "Liberar" : "Fijar"}
+            </Button>
+            <Button variant="secondary" icon="shapes" onClick={() => dispatch({ type: "UNGROUP", id: group.id })}>
+              Desagrupar
+            </Button>
+          </div>
+        </Section>
+
+        <Section title="Guardar esta figura">
+          <div className="save-group-actions">
+            <Button variant="primary" icon="save" className="wide" onClick={saveFigure}>
+              Guardar «{group.name}»
+            </Button>
+            <Button variant="secondary" icon="download" className="wide" onClick={exportFigure}>
+              Exportar figura para LightBurn (ZIP)
+            </Button>
+          </div>
+          <p className="micro-help">
+            Se guarda con sus <b>imágenes incrustadas</b>, sus piezas de corte y su propio nombre. El JSON sirve para
+            reinsertarla en LaserCat; el ZIP incluye SVG por capas, imágenes, CSV y LEEME.
+          </p>
+        </Section>
+
+        <p className="inspector-foot">
+          Para volver a importar figuras desde LightBurn, exporta <b>SVG con imágenes incrustadas</b> o un <b>.lbrn2</b>
+          {" "}(soporte nativo en camino).
+        </p>
       </div>
     </aside>
   );
