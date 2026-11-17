@@ -13,7 +13,6 @@ import { applyTheme, themeRecorded } from "./lib/themes";
 import { buildTestCard, testCardReadme } from "./lib/testcard";
 import { makeZip } from "./lib/export";
 import { svgFileToParts, imageFileToPart } from "./lib/autoImport";
-import { buildMiniPayload } from "./lib/minis";
 import { DesignPanel } from "./components/shell/DesignPanel";
 import { ViewerShell } from "./components/shell/ViewerShell";
 import { SettingsShell } from "./components/shell/SettingsShell";
@@ -59,10 +58,19 @@ export default function App() {
     applyTheme(theme);
   }, [theme]);
 
+  const wood3dOptions = useMemo(
+    () => ({ ...previewOptions, depthMm: doc.settings.wood3dDepth ?? 3, cutAway: doc.settings.wood3dCut !== false }),
+    [previewOptions, doc.settings.wood3dDepth, doc.settings.wood3dCut],
+  );
+
   const stats = useMemo(() => computeStats(doc), [doc]);
   const pages = Math.max(1, ...doc.placements.map((p) => p.page + 1));
   const page = Math.min(ui.page, pages - 1);
-  const missing = state.lastNest?.unplaced || Math.max(0, stats.placed - doc.placements.length);
+  const groups = doc.groups || [];
+  const groupedPartIds = new Set(groups.flatMap((g) => g.members.map((m) => m.partId)));
+  const wantedPieces = doc.parts.reduce((sum, p) => sum + (groupedPartIds.has(p.id) ? 0 : Math.max(0, p.copies)), 0) +
+    groups.reduce((sum, g) => sum + g.members.length * Math.max(0, g.copies), 0);
+  const missing = Math.max(0, wantedPieces - doc.placements.length);
   const anyDialog =
     ui.showSvgDialog || ui.showImageDialog || ui.showExportDialog || ui.showHelpDialog ||
     compareOpen || welcome.visible || libraryOpen;
@@ -199,16 +207,6 @@ export default function App() {
     }
     downloadBytes(bundle.name, bundle.bytes);
     dispatch({ type: "TOAST", text: "Figura exportada con SVG, imágenes y LEEME.", kind: "ok" });
-  };
-
-  const addMinis = () => {
-    const payload = buildMiniPayload(doc, doc.settings.miniScale ?? 0.5);
-    if (!payload.parts.length) {
-      dispatch({ type: "TOAST", text: "Añade primero alguna pieza.", kind: "warn" });
-      return;
-    }
-    dispatch({ type: "ADD_PARTS", parts: payload.parts, groups: payload.groups, nest: true });
-    dispatch({ type: "TOAST", text: `${payload.parts.length} minis añadidos para rellenar huecos.`, kind: "ok" });
   };
 
   const downloadTestCard = () => {
@@ -407,6 +405,8 @@ export default function App() {
             onOpenProject={openProject}
             onDropFiles={onDropFiles}
             previewOptions={previewOptions}
+            wood3dOptions={wood3dOptions}
+            missing={missing}
             onNeedHelp={() => welcome.abrir()}
           />
         </div>
@@ -429,7 +429,6 @@ export default function App() {
             onHelp={() => openHelp("inicio")}
             onReport={report}
             onOptimize={optimize}
-            onAddMinis={addMinis}
             onOpenLibrary={() => setLibraryOpen(true)}
             previewOptions={previewOptions}
           />

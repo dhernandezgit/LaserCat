@@ -288,15 +288,21 @@ export function Board({
           stroke="none"
         />
         {part.kind === "raster" && part.raster ? (
-          <image
-            x={g.baseBounds.x}
-            y={g.baseBounds.y}
-            width={Math.max(0.01, g.baseBounds.w)}
-            height={Math.max(0.01, g.baseBounds.h)}
-            href={part.raster.dataUrl}
-            preserveAspectRatio="none"
-            opacity={0.92}
-          />
+          part.raster.matrix ? (
+            <g transform={`matrix(${part.raster.matrix.join(" ")})`}>
+              <image x={0} y={0} width={1} height={1} href={part.raster.dataUrl} preserveAspectRatio="none" opacity={0.92} />
+            </g>
+          ) : (
+            <image
+              x={g.baseBounds.x}
+              y={g.baseBounds.y}
+              width={Math.max(0.01, g.baseBounds.w)}
+              height={Math.max(0.01, g.baseBounds.h)}
+              href={part.raster.dataUrl}
+              preserveAspectRatio="none"
+              opacity={0.92}
+            />
+          )
         ) : part.operation === "engrave" ? (
           <path d={dBase} fill="rgba(72,43,20,.72)" fillRule="evenodd" opacity={0.95} stroke={stroke} strokeWidth={0.18} />
         ) : part.operation === "score" ? (

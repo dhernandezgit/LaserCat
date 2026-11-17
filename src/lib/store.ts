@@ -26,7 +26,7 @@ export const DEFAULT_SHEET: Sheet = {
   margin: 5,
   spacing: 3,
   kerf: 0.15,
-  rotation: "90",
+  rotation: "libre",
   quality: "maxima",
   method: "auto",
   packMode: "shape",
@@ -40,7 +40,8 @@ export const DEFAULT_SETTINGS: DocSettings = {
   autoNest: true,
   imageDropMode: "cut",
   compact: true,
-  miniScale: 0.5,
+  wood3dDepth: 3,
+  wood3dCut: true,
   exportBridges: false,
   bridgeCount: 4,
   bridgeWidth: 2.5,
@@ -68,7 +69,7 @@ export interface LastNest {
 export interface UiState {
   page: number;
   tab: "diseno" | "plancha" | "grabado" | "material";
-  view: "plan" | "wood";
+  view: "plan" | "wood" | "wood3d";
   showSvgDialog: boolean;
   showImageDialog: boolean;
   showExportDialog: boolean;
@@ -373,7 +374,7 @@ export function createInitialState(): AppState {
     ui: {
       page: 0,
       tab,
-      view: viewParam === "wood" ? "wood" : "plan",
+      view: viewParam === "wood" || viewParam === "wood3d" ? viewParam : "plan",
       showSvgDialog: false,
       showImageDialog: false,
       showExportDialog: false,
@@ -485,7 +486,22 @@ export function reducer(state: AppState, action: Action): AppState {
           width: Math.max(0.1, p.width * sx),
           height: Math.max(0.1, p.height * sy),
           contours: p.contours.map((c) => c.map((pt) => ({ x: pt.x * sx, y: pt.y * sy }))),
-          raster: p.raster ? { ...p.raster, dpi: p.raster.dpi / Math.max(0.01, (sx + sy) / 2) } : undefined,
+          raster: p.raster
+            ? {
+                ...p.raster,
+                dpi: p.raster.dpi / Math.max(0.01, (sx + sy) / 2),
+                matrix: p.raster.matrix
+                  ? ([
+                      p.raster.matrix[0] * sx,
+                      p.raster.matrix[1] * sx,
+                      p.raster.matrix[2] * sy,
+                      p.raster.matrix[3] * sy,
+                      p.raster.matrix[4] * sx,
+                      p.raster.matrix[5] * sy,
+                    ] as [number, number, number, number, number, number])
+                  : undefined,
+              }
+            : undefined,
         };
       });
       const groups = getGroups(state.doc).map((g) =>
@@ -506,6 +522,21 @@ export function reducer(state: AppState, action: Action): AppState {
           width: Math.max(0.1, action.width),
           height: Math.max(0.1, action.height),
           contours: p.contours.map((c) => c.map((pt) => ({ x: pt.x * sx, y: pt.y * sy }))),
+          raster: p.raster
+            ? {
+                ...p.raster,
+                matrix: p.raster.matrix
+                  ? ([
+                      p.raster.matrix[0] * sx,
+                      p.raster.matrix[1] * sx,
+                      p.raster.matrix[2] * sy,
+                      p.raster.matrix[3] * sy,
+                      p.raster.matrix[4] * sx,
+                      p.raster.matrix[5] * sy,
+                    ] as [number, number, number, number, number, number])
+                  : undefined,
+              }
+            : undefined,
         };
       });
       return autoNestOrKeep(state, { ...state.doc, parts }, `resize-${action.id}`);
@@ -905,7 +936,11 @@ export function loadStoredDoc(): Doc | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return normalizeDoc(parsed);
+    const clean = normalizeDoc(parsed);
+    if (clean && !parsed?.sheet?.method && parsed?.sheet?.rotation === "90" && (parsed?.sheet?.packMode ?? "shape") === "shape") {
+      clean.sheet.rotation = "libre";
+    }
+    return clean;
   } catch {
     return null;
   }
@@ -976,7 +1011,7 @@ export function normalizeDoc(input: any): Doc | null {
     margin: Math.max(0, Math.min(100, Number(input.sheet.margin) || 0)),
     spacing: Math.max(0, Math.min(100, Number(input.sheet.spacing) || 0)),
     kerf: Math.max(0, Math.min(3, Number(input.sheet.kerf) || 0)),
-    rotation: ["no", "90", "libre"].includes(input.sheet.rotation) ? input.sheet.rotation : "90",
+    rotation: ["no", "90", "libre"].includes(input.sheet.rotation) ? input.sheet.rotation : "libre",
     quality: ["rapida", "equilibrada", "maxima"].includes(input.sheet.quality)
       ? input.sheet.quality
       : "equilibrada",

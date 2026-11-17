@@ -5,7 +5,7 @@ import { downloadDataUrl } from "../lib/download";
 import { renderWoodPreview, SPECIES_BY_ID, type WoodPreviewOptions } from "../lib/wood";
 import { Icon } from "./UI";
 
-function useRasterImages(doc: Doc): Map<string, HTMLImageElement> {
+export function useRasterImages(doc: Doc): Map<string, HTMLImageElement> {
   const [images, setImages] = useState<Map<string, HTMLImageElement>>(new Map());
   useEffect(() => {
     let cancelled = false;

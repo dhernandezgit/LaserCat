@@ -6,7 +6,15 @@ export function PartThumb({ part, size = 46 }: { part: Part; size?: number }) {
   if (part.kind === "raster" && part.raster) {
     return (
       <div className="part-thumb raster" style={{ width: size, height: size }}>
-        <img src={part.raster.dataUrl} alt="" />
+        {part.raster.matrix ? (
+          <svg viewBox={`0 0 ${Math.max(0.1, part.width)} ${Math.max(0.1, part.height)}`} width={size} height={size} preserveAspectRatio="xMidYMid meet">
+            <g transform={`matrix(${part.raster.matrix.join(" ")})`}>
+              <image x={0} y={0} width={1} height={1} href={part.raster.dataUrl} preserveAspectRatio="none" />
+            </g>
+          </svg>
+        ) : (
+          <img src={part.raster.dataUrl} alt="" />
+        )}
       </div>
     );
   }

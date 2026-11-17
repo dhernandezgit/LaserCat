@@ -5,6 +5,8 @@ import type { Action } from "../../lib/store";
 import { formatDuration } from "../../lib/laser";
 import { Board } from "../Board";
 import { WoodCanvas } from "../WoodCanvas";
+import { Wood3DCanvas } from "../Wood3DCanvas";
+import type { Wood3DOptions } from "../../lib/wood3d";
 import { Icon } from "../UI";
 
 export function ViewerShell({
@@ -20,6 +22,8 @@ export function ViewerShell({
   setShowGrid,
   view,
   setView,
+  wood3dOptions,
+  missing,
   canUndo,
   canRedo,
   onUndo,
@@ -42,8 +46,8 @@ export function ViewerShell({
   setZoom: (z: number | ((z: number) => number)) => void;
   showGrid: boolean;
   setShowGrid: (v: boolean) => void;
-  view: "plan" | "wood";
-  setView: (v: "plan" | "wood") => void;
+  view: "plan" | "wood" | "wood3d";
+  setView: (v: "plan" | "wood" | "wood3d") => void;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -54,9 +58,10 @@ export function ViewerShell({
   onOpenProject: () => void;
   onDropFiles: (files: File[]) => void;
   previewOptions: Parameters<typeof WoodCanvas>[0]["options"];
+  wood3dOptions: Wood3DOptions;
+  missing: number;
   onNeedHelp: () => void;
 }) {
-  const missing = stats.unplaced || Math.max(0, stats.placed - doc.placements.length);
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -80,6 +85,9 @@ export function ViewerShell({
           </button>
           <button type="button" className={view === "wood" ? "on" : ""} onClick={() => setView("wood")} title="Simulación en madera">
             <Icon name="wood" size={14} /> Madera
+          </button>
+          <button type="button" className={view === "wood3d" ? "on" : ""} onClick={() => setView("wood3d")} title="Ver la madera en 3D, con grosor y piezas retiradas">
+            <Icon name="shapes" size={14} /> 3D
           </button>
         </div>
         <button type="button" className={showGrid ? "soft-on" : ""} onClick={() => setShowGrid(!showGrid)} title="Mostrar u ocultar la cuadrícula">
@@ -112,6 +120,8 @@ export function ViewerShell({
             showGrid={showGrid}
             onDropFiles={onDropFiles}
           />
+        ) : view === "wood3d" ? (
+          <Wood3DCanvas doc={doc} page={page} options={wood3dOptions} />
         ) : (
           <WoodCanvas doc={doc} page={page} options={previewOptions} />
         )}
@@ -139,8 +149,9 @@ export function ViewerShell({
         </div>
 
         {missing > 0 && (
-          <div className="unplaced-pill" title="No caben todas las copias en una plancha">
-            ⚠ {missing} pieza{missing === 1 ? "" : "s"} sin colocar
+          <div className="unplaced-banner" role="alert">
+            <span>⚠ {missing} pieza{missing === 1 ? "" : "s"} sin colocar. Prueba Exacta, baja la separación o añade otra plancha.</span>
+            <button type="button" className="cc-btn" onClick={onOptimize}>Recolocar</button>
           </div>
         )}
       </div>

@@ -186,10 +186,13 @@ function rasterImageTag(part: Part, placement: Placement): string {
   const bb = g.baseBounds;
   const m = pg.matrix;
   const dpi = part.raster.dpi || 300;
+  const imgMatrix = part.raster.matrix;
+  const image = imgMatrix
+    ? `<image x="0" y="0" width="1" height="1" transform="matrix(${imgMatrix.join(" ")})" preserveAspectRatio="none" xlink:href="${part.raster.dataUrl}" data-dpi="${dpi}"/>`
+    : `<image x="${fmt(bb.x)}" y="${fmt(bb.y)}" width="${fmt(Math.max(0.01, bb.w))}" height="${fmt(Math.max(0.01, bb.h))}" preserveAspectRatio="none" xlink:href="${part.raster.dataUrl}" data-dpi="${dpi}"/>`;
   return (
     `<g transform="matrix(${fmt(m.a)} ${fmt(m.b)} ${fmt(m.c)} ${fmt(m.d)} ${fmt(m.e)} ${fmt(m.f)})">` +
-    `<image x="${fmt(bb.x)}" y="${fmt(bb.y)}" width="${fmt(Math.max(0.01, bb.w))}" height="${fmt(Math.max(0.01, bb.h))}" ` +
-    `preserveAspectRatio="none" xlink:href="${part.raster.dataUrl}" data-dpi="${dpi}"/>` +
+    image +
     `</g>`
   );
 }

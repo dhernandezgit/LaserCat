@@ -136,6 +136,7 @@ interface RawImage {
   chain: string[];
   labels: Record<string, string>;
   bbox: Bounds;
+  matrix: [number, number, number, number, number, number];
   index: number;
 }
 
@@ -871,6 +872,17 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
       const bbox = boundsOf(corners);
       if (bbox.w < 0.05 || bbox.h < 0.05) return;
       elementCount++;
+      // La imagen del SVG puede venir girada, espejada o con transformaciones.
+      // Guardamos la matriz que lleva su cuadrado unitario al bbox local para
+      // que el grabado y los cortes mantengan exactamente el mismo registro.
+      const matrix: [number, number, number, number, number, number] = [
+        local.a * w,
+        local.b * w,
+        local.c * h,
+        local.d * h,
+        local.a * x + local.c * y + local.e - bbox.x,
+        local.b * x + local.d * y + local.f - bbox.y,
+      ];
       rawImages.push({
         dataUrl: href,
         label: labelOf(el) || el.getAttribute("id") || "",
@@ -878,6 +890,7 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
         chain: elChain,
         labels,
         bbox,
+        matrix,
         index: shapeIndex++,
       });
       return;
@@ -1125,6 +1138,7 @@ export function importSvg(svgText: string, options: ImportOptions): SvgImportRes
       mode: "grayscale",
       threshold: 128,
       invert: false,
+      matrix: img.matrix,
     };
     imageParts.push({
       id: `part-img-${i}`,
@@ -1376,6 +1390,9 @@ function partsColorIndex(part: ImportedPart): number {
 /** Mini SVG de una pieza para las tarjetas del importador. */
 export function partPreviewSvg(part: ImportedPart, size = 72): string {
   if (part.kind === "raster" && part.raster) {
+    if (part.raster.matrix) {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${Math.max(0.1, part.width)} ${Math.max(0.1, part.height)}" width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet"><g transform="matrix(${part.raster.matrix.join(" ")})"><image x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${part.raster.dataUrl}"/></g></svg>`;
+    }
     return `<img src="${part.raster.dataUrl}" width="${size}" height="${size}" style="object-fit:contain;width:100%;height:100%" alt=""/>`;
   }
   const b = boundsOf(part.contours.flat());
@@ -1407,7 +1424,14 @@ export function groupPreviewSvg(parts: ImportedPart[], size = 96): string {
   let body = "";
   for (const p of members) {
     if (p.kind === "raster" && p.raster) {
-      body += `<image x="${fmt(p.sourceBounds.x)}" y="${fmt(p.sourceBounds.y)}" width="${fmt(p.sourceBounds.w)}" height="${fmt(p.sourceBounds.h)}" preserveAspectRatio="none" href="${p.raster.dataUrl}"/>`;
+      const s = p.sourceBounds.w > 0 ? p.width / p.sourceBounds.w : 1;
+      if (p.raster.matrix) {
+        const [a, b, c, d, e, f] = p.raster.matrix;
+        const sm = [a / s, b / s, c / s, d / s, p.sourceBounds.x + e / s, p.sourceBounds.y + f / s];
+        body += `<g transform="matrix(${sm.join(" ")})"><image x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${p.raster.dataUrl}"/></g>`;
+      } else {
+        body += `<image x="${fmt(p.sourceBounds.x)}" y="${fmt(p.sourceBounds.y)}" width="${fmt(p.sourceBounds.w)}" height="${fmt(p.sourceBounds.h)}" preserveAspectRatio="none" href="${p.raster.dataUrl}"/>`;
+      }
     } else {
       const d = p.sourceContours
         .map((c) => `M${c.map((q) => `${fmt(q.x)} ${fmt(q.y)}`).join("L")}Z`)

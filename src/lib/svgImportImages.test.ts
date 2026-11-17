@@ -38,4 +38,19 @@ describe("importSvg con imágenes incrustadas", () => {
     expect(payload.groups[0].members).toHaveLength(2);
     expect(payload.groups[0].members.some((m) => payload.parts.find((p) => p.id === m.partId)?.kind === "raster")).toBe(true);
   });
+
+  it("conserva giros y espejos de la imagen respecto a los cortes", () => {
+    const png =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="60mm" viewBox="0 0 60 60">
+      <image x="10" y="10" width="40" height="40" transform="rotate(180 30 30)" href="${png}" />
+      <rect x="7" y="7" width="46" height="46" fill="none" stroke="#000" stroke-width="0.2" />
+    </svg>`;
+    const res = importSvg(svg, { tolerance: 1, mode: "inteligente", strokeMode: "cut", simplify: 0, whiteAsHoles: true });
+    const image = res.parts.find((p) => p.kind === "raster")!;
+    expect(image.raster?.matrix?.[0]).toBeLessThan(0);
+    expect(image.raster?.matrix?.[3]).toBeLessThan(0);
+    const payload = partsFromSvgResult(res);
+    expect(payload.groups[0].members).toHaveLength(2);
+  });
 });

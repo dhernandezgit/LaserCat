@@ -19,7 +19,6 @@ import { Icon, type IconNameType } from "../UI";
 const TABS: { id: string; label: string; icon: IconNameType }[] = [
   { id: "general", label: "General", icon: "settings" },
   { id: "optim", label: "Optim.", icon: "sparkles" },
-  { id: "minis", label: "Minis", icon: "copy" },
   { id: "border", label: "Borde", icon: "shapes" },
   { id: "image", label: "Imagen", icon: "image" },
   { id: "material", label: "Material", icon: "wood" },
@@ -30,7 +29,6 @@ const TABS: { id: string; label: string; icon: IconNameType }[] = [
 const SECTION_KEYWORDS: Record<string, string> = {
   general: "general plancha hoja pagina tamaño ancho alto margen separacion kerf rotacion calidad metodo copias auto optimizar",
   optim: "optimizacion metodo greedy largest voronoi genetico compactar cajas forma real rotacion tiempo recalcular",
-  minis: "minis mini copias relleno huecos pequenas escala",
   border: "borde offset pegatina contorno exterior agujeros separado",
   image: "imagen foto grabado b/n grises tramado silueta svg incrustada",
   material: "material madera maquina laser potencia velocidad pasadas tilo abedul roble nogal cerezo bambu mdf pino carton tono",
@@ -141,7 +139,6 @@ export function SettingsShell({
   onHelp,
   onReport,
   onOptimize,
-  onAddMinis,
   onOpenLibrary,
   previewOptions,
 }: {
@@ -150,8 +147,8 @@ export function SettingsShell({
   theme: string;
   onTheme: (key: string) => void;
   stats: { efficiency: number; timeSeconds: number; pages: number; placed: number };
-  view: "plan" | "wood";
-  onView: (v: "plan" | "wood") => void;
+  view: "plan" | "wood" | "wood3d";
+  onView: (v: "plan" | "wood" | "wood3d") => void;
   showGrid: boolean;
   onShowGrid: (v: boolean) => void;
   onOpenImageDialog: () => void;
@@ -161,14 +158,13 @@ export function SettingsShell({
   onHelp: () => void;
   onReport: () => void;
   onOptimize: () => void;
-  onAddMinis: () => void;
   onOpenLibrary: () => void;
   previewOptions: WoodPreviewOptions;
 }) {
   const [tab, setTab] = useState("general");
   const [busca, setBusca] = useState("");
   const [open, setOpen] = useState<Record<string, boolean>>({
-    general: true, optim: false, minis: false, border: false, image: false,
+    general: true, optim: false, border: false, image: false,
     material: false, view: false, extras: false,
   });
   const [borderAll, setBorderAll] = useState(0);
@@ -228,19 +224,19 @@ export function SettingsShell({
       </div>
 
       <div className="seg" role="group" aria-label="Modo de empaquetado">
-        <button type="button" className={(sheet.packMode ?? "shape") === "shape" ? "on" : ""} onClick={() => setSheet({ packMode: "shape" })}>
+        <button type="button" className={(sheet.packMode ?? "shape") === "shape" ? "on" : ""} onClick={() => setSheet({ packMode: "shape", rotation: "libre" })}>
           Forma real
           <small>Silueta, cualquier ángulo</small>
         </button>
-        <button type="button" className={(sheet.packMode ?? "shape") === "box" ? "on" : ""} onClick={() => setSheet({ packMode: "box" })}>
+        <button type="button" className={(sheet.packMode ?? "shape") === "box" ? "on" : ""} onClick={() => setSheet({ packMode: "box", rotation: "90" })}>
           Rectángulos
           <small>Por caja, más rápido</small>
         </button>
       </div>
 
       <div className="quick-chips">
-        <button type="button" onClick={() => openTab("minis")} title="Copias pequeñas para rellenar huecos">
-          ✦ Minis
+        <button type="button" onClick={() => onView("wood3d")} title="Ver la madera en 3D con el grosor y el corte">
+          ✦ 3D
         </button>
         <button type="button" className={sheet.singlePage ? "on" : ""} onClick={() => setSheet({ singlePage: !sheet.singlePage })} title="No generar más de una plancha">
           Solo 1 plancha
@@ -392,20 +388,6 @@ export function SettingsShell({
         </Sect>
       )}
 
-      {matches("minis") && (
-        <Sect id="minis" title="Minis de relleno" icon="copy" open={!!open.minis || (q.length >= 2 && SECTION_KEYWORDS.minis.includes(q))} toggle={toggle}>
-          <div className="ctl">
-            <label>Escala de las copias mini</label>
-            <input type="range" min={20} max={80} step={5} value={Math.round((settings.miniScale ?? 0.5) * 100)} onChange={(e) => setSettings({ miniScale: Number(e.target.value) / 100 })} />
-            <span className="hint">{Math.round((settings.miniScale ?? 0.5) * 100)} % del tamaño original</span>
-          </div>
-          <button type="button" className="cc-btn primary" onClick={onAddMinis}>Añadir minis de todas las figuras</button>
-          <div className="micro-help">
-            Crea copias pequeñas de cada pieza o figura y las coloca en los huecos. Es útil para llaveros, muestras o para aprovechar retales; si no caben, aparecerán sin colocar.
-          </div>
-        </Sect>
-      )}
-
       {matches("border") && (
         <Sect id="border" title="Borde / pegatina" icon="shapes" open={!!open.border || (q.length >= 2 && SECTION_KEYWORDS.border.includes(q))} toggle={toggle}>
           <div className="ctl">
@@ -524,8 +506,35 @@ export function SettingsShell({
             <span className="hint">{settings.previewPasses}</span>
           </div>
           <div className="two">
-            <button type="button" className="cc-btn" onClick={() => onView("wood")}>Ver a lo grande</button>
+            <button type="button" className="cc-btn" onClick={() => onView("wood")}>Ver en madera</button>
+            <button type="button" className="cc-btn primary" onClick={() => onView("wood3d")}>Ver en 3D</button>
+          </div>
+          <div className="two">
+            <div className="ctl">
+              <label>Grosor / profundidad</label>
+              <input
+                type="range"
+                min={0.5}
+                max={12}
+                step={0.5}
+                value={settings.wood3dDepth ?? 3}
+                onChange={(e) => setSettings({ wood3dDepth: Number(e.target.value) })}
+              />
+              <span className="hint">{(settings.wood3dDepth ?? 3).toFixed(1)} mm</span>
+            </div>
+            <div className="ctl">
+              <label>Piezas recortadas</label>
+              <ToggleLine
+                checked={settings.wood3dCut !== false}
+                onChange={(v) => setSettings({ wood3dCut: v })}
+                label="Ver huecos y piezas retiradas"
+              />
+              <span className="hint">Desactívalo para ver el tablero antes de retirar las piezas.</span>
+            </div>
+          </div>
+          <div className="two">
             <button type="button" className="cc-btn" onClick={onCompare}>Comparar 4 × 4</button>
+            <button type="button" className="cc-btn" onClick={() => onView("plan")}>Volver a la plancha</button>
           </div>
           <button type="button" className="cc-btn" onClick={onTestCard}>Descargar tarjeta de pruebas</button>
           <div className="micro-help">La simulación es orientativa: cada lente, tablero y velocidad quema distinto. Usa una prueba pequeña antes de la pieza buena.</div>

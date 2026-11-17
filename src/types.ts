@@ -33,6 +33,8 @@ export interface RasterData {
   mode: EngraveMode;
   threshold: number;
   invert: boolean;
+  /** Matriz afín que lleva el cuadrado unitario de la imagen al bbox local (mm). */
+  matrix?: [number, number, number, number, number, number];
 }
 
 /** Miembro de un ensamblaje: pieza + desplazamiento relativo al grupo. */
@@ -146,7 +148,8 @@ export interface DocSettings {
   autoNest: boolean;
   imageDropMode?: ImageDropMode;
   compact?: boolean;
-  miniScale?: number;
+  wood3dDepth?: number;
+  wood3dCut?: boolean;
   /** Ajustes de exportaciÃ³n. */
   exportBridges: boolean;
   bridgeCount: number;

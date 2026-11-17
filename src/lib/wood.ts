@@ -324,7 +324,12 @@ export function renderWoodPreview(
             scale * m.f + offY,
           );
           bctx.globalAlpha = 1;
-          bctx.drawImage(mask, placed.localBaseBounds.x, placed.localBaseBounds.y, placed.localBaseBounds.w, placed.localBaseBounds.h);
+          if (part.raster?.matrix) {
+            bctx.transform(...part.raster.matrix);
+            bctx.drawImage(mask, 0, 0, 1, 1);
+          } else {
+            bctx.drawImage(mask, placed.localBaseBounds.x, placed.localBaseBounds.y, placed.localBaseBounds.w, placed.localBaseBounds.h);
+          }
           bctx.restore();
         } else {
           bctx.save();

@@ -70,7 +70,15 @@ export function groupParts(doc: Doc, group: Assembly): Part[] {
 export function groupThumbnail(doc: Doc, group: Assembly): string {
   const parts = groupParts(doc, group);
   const image = parts.find((p) => p.kind === "raster" && p.raster);
-  if (image?.raster) return image.raster.dataUrl;
+  if (image?.raster) {
+    if (image.raster.matrix) {
+      const w = Math.max(0.1, image.width);
+      const h = Math.max(0.1, image.height);
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet"><g transform="matrix(${image.raster.matrix.join(" ")})"><image x="0" y="0" width="1" height="1" preserveAspectRatio="none" href="${image.raster.dataUrl}"/></g></svg>`;
+      return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    }
+    return image.raster.dataUrl;
+  }
   const geo = assemblyGeometry(group, parts);
   if (!geo.contours.length) return "";
   const pad = Math.max(geo.width, geo.height) * 0.05 + 0.5;

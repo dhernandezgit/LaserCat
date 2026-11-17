@@ -37,7 +37,7 @@ Arranca con el tema **Eevee**.
   con su geometrÃ­a, asÃ­ que una estrella puede encajar junto a la oreja de un gato.
 - **4 mÃ©todos de colocaciÃ³n** (Greedy/Bottom-Left, Largest First, Voronoi/huecos libres y GenÃ©tico),
   **3 calidades** (RÃ¡pida / Normal / **Exacta**) y **compactaciÃ³n** posterior tipo DeepNest.
-- **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias**, **minis de relleno** y **mÃºltiples planchas**.
+- **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias** y **mÃºltiples planchas**. En **forma real** se usan todos los ángulos por defecto; **Rectángulos** limita a 90° para ir más rápido.
 - **Kerf** configurable: el corte se compensa hacia el desperdicio para que la pieza final mida lo que debe.
 - **Fijar piezas** con el pin (o al arrastrarlas): el resto se recoloca alrededor.
 - Aprovechamiento, nÃºmero de planchas y **tiempo estimado** de corte/grabado en directo.
@@ -98,6 +98,7 @@ Arranca con el tema **Eevee**.
 
 ### Vista en madera
 
+- **Vista 3D** del tablero con profundidad configurable (**3 mm por defecto**) y opción de mostrar los huecos y las piezas ya retiradas.
 - **9 maderas**: tilo, abedul, roble, nogal, cerezo, bambÃº, DM/MDF, pino y cartÃ³n.
 - **5 tonos de lÃ¡ser**: miel, cafÃ©, carbÃ³n, gris y rojizo, para comparar el mismo trabajo con
   distintas quemaduras.
@@ -109,6 +110,8 @@ Arranca con el tema **Eevee**.
 ![Distintas maderas con el mismo diseÃ±o](docs/maderas.jpg)
 
 ![Comparador de 4 maderas y 4 intensidades](docs/comparador.png)
+
+![Vista 3D de la madera con las piezas retiradas](docs/3d.png)
 
 ### Temas y aspecto
 
@@ -193,7 +196,7 @@ derecha y **barra de estado** abajo. Los tres paneles tienen separadores arrastr
 | **Visor** | Plancha/madera, arrastrar, girar, fijar, zoom, pÃ¡ginas, Optimizar y Guardar/Exportar. |
 | **Ajustes â†’ General** | Plancha, presets A4/A3/A5/Letter, margen, separaciÃ³n, kerf, rotaciÃ³n, calidad y mÃ©todo. |
 | **Ajustes â†’ OptimizaciÃ³n** | MÃ©todo, forma real/rectÃ¡ngulos, compactaciÃ³n y recÃ¡lculo. |
-| **Ajustes â†’ Minis** | Copias pequeÃ±as para rellenar huecos, con escala configurable. |
+| **Ajustes → Material → 3D** | Grosor del tablero, piezas retiradas y vista 3D. |
 | **Ajustes â†’ Borde / Imagen / Material** | Offset global, importaciÃ³n de imÃ¡genes, madera, tonos, potencia y tarjeta de pruebas. |
 | **Ajustes â†’ Vista y tema** | 12 temas CryCat, cuadrÃ­cula y leyenda de capas. |
 | **Barra inferior** | CÃ³mo usar, reportar, apoyar, versiÃ³n y estado del taller. |
@@ -295,7 +298,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 56 tests (geometrÃ­a, importador SVG con imÃ¡genes, figuras, nesting, export, store, tarjeta)
+npm test           # 57 tests (geometrÃ­a, importador SVG con imÃ¡genes, figuras, nesting, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -314,7 +317,7 @@ src/
     nest.ts          empaquetado por forma real (mÃ©todos + compactaciÃ³n)
     assembly.ts      figuras/ensamblajes, geometrÃ­a combinada y rotaciÃ³n
     groupLibrary.ts  biblioteca, JSON y ZIP por figura
-    minis.ts         copias pequeÃ±as de relleno
+    wood3d.ts        proyección 3D, grosor y piezas retiradas
     themes.ts        los 12 temas pastel de CryCat
     laser.ts         mÃ¡quinas, materiales, capas, kerf y tiempos
     export.ts        SVG para LightBurn, puentes, ZIP y LEEME
