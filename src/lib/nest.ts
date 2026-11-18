@@ -78,7 +78,9 @@ function mulberry32(seed: number): () => number {
 
 function rasterize(contours: Contour[], cell: number): { gw: number; gh: number; bits: Uint8Array } | null {
   const b = contoursBounds(contours);
-  if (b.w < cell * 0.35 || b.h < cell * 0.35) return null;
+  if (b.w <= 0 || b.h <= 0) return null;
+  // Evita rejillas absurdas si una pieza es enorme; se marcará sin colocar.
+  if (b.w / cell > 4000 || b.h / cell > 4000) return null;
   const gw = Math.max(1, Math.ceil(b.w / cell));
   const gh = Math.max(1, Math.ceil(b.h / cell));
   const bits = new Uint8Array(gw * gh);
@@ -106,6 +108,9 @@ function rasterize(contours: Contour[], cell: number): { gw: number; gh: number;
       for (let gx = from; gx <= to; gx++) bits[gy * gw + gx] = 1;
     }
   }
+  // Piezas más finas que una celda: al menos ocupan una celda para poder
+  // colocarlas y avisar si no caben, en lugar de desaparecer del cálculo.
+  if (!bits.some((v) => v)) bits[Math.floor(gh / 2) * gw + Math.floor(gw / 2)] = 1;
   return { gw, gh, bits };
 }
 
@@ -172,9 +177,15 @@ function buildRotation(contours: Contour[], angle: number, cell: number, radiusC
   };
 }
 
-function anglesFor(mode: RotationMode, quality: Quality): number[] {
+function normalAnglesFor(mode: RotationMode): number[] {
+  if (mode === "no") return [0];
+  return [0, 90, 180, 270];
+}
+
+function broadAnglesFor(mode: RotationMode): number[] {
   if (mode === "no") return [0];
   if (mode === "90") return [0, 90, 180, 270];
+  // Si los ángulos normales no bastan, probamos también diagonales.
   return [0, 45, 90, 135, 180, 225, 270, 315];
 }
 
@@ -281,16 +292,18 @@ function placeRun(
    * quepa. Antes, el ángulo 0 casi siempre encontraba un sitio y los demás
    * ángulos nunca se usaban; por eso el aprovechamiento era pobre.
    */
-  const findSpot = (sheet: GridSheet, rots: RotShape[]): { rot: RotShape; sx: number; sy: number } | null => {
+  const findSpot = (sheet: GridSheet, rots: RotShape[], deadline: number): { rot: RotShape; sx: number; sy: number } | null => {
     let best: { rot: RotShape; sx: number; sy: number } | null = null;
     let bestScore = Infinity;
     for (const rot of rots) {
+      if (Date.now() > deadline) return best;
       const minX = -rot.pad;
       const minY = -rot.pad;
       const maxX = sheet.gw - rot.pad - rot.gridW;
       const maxY = sheet.gh - rot.pad - rot.gridH;
       let found = false;
       for (let sy = minY; sy <= maxY && !found; sy++) {
+        if ((sy & 31) === 0 && Date.now() > deadline) return best;
         for (let sx = minX; sx <= maxX; sx++) {
           if (!fits(sheet, rot, sx, sy)) continue;
           // Prioriza arriba/izquierda; a igualdad, prefiere el ángulo más simple.
@@ -317,7 +330,7 @@ function placeRun(
     for (let copy = 0; copy < inst.copies; copy++) {
       let placed = false;
       for (let s = 0; s < sheets.length; s++) {
-        const spot = findSpot(sheets[s], rots);
+        const spot = findSpot(sheets[s], rots, budgetEnd);
         if (spot) {
           mark(sheets[s], spot.rot, spot.sx, spot.sy);
           placements.push({
@@ -335,7 +348,7 @@ function placeRun(
       }
       if (!placed && sheets.length < sheetsAllowed) {
         const sheet = ensureSheet(sheets.length);
-        const spot = findSpot(sheet, rots);
+        const spot = findSpot(sheet, rots, budgetEnd);
         if (spot) {
           mark(sheet, spot.rot, spot.sx, spot.sy);
           placements.push({
@@ -367,7 +380,7 @@ function placeRun(
         unmark(oldSheet, p.rot, p.gx - p.rot.pad, p.gy - p.rot.pad);
         let moved = false;
         for (let t = 0; t < s; t++) {
-          const spot = findSpot(sheets[t], rotations[p.partIndex] || []);
+          const spot = findSpot(sheets[t], rotations[p.partIndex] || [], budgetEnd);
           if (!spot) continue;
           mark(sheets[t], spot.rot, spot.sx, spot.sy);
           p.sheet = t;
@@ -470,34 +483,27 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const sheetsAllowed = sheet.singlePage ? 1 : 999;
   const budgetEnd = started + QUALITY_BUDGET[options.quality];
   const radius = Math.max(0, Math.ceil((sheet.spacing + sheet.kerf) / 2 / cell));
-  const defaultAngles = anglesFor(options.rotation, options.quality);
+  const normalAngles = normalAnglesFor(options.rotation);
+  const broadAngles = broadAnglesFor(options.rotation);
 
   const instances: Instance[] = [];
   const rotationCache: RotShape[][] = [];
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i];
     if (!p.contours.length || p.width <= 0 || p.height <= 0 || p.copies <= 0) continue;
-    const angles = p.angles && p.angles.length ? p.angles : defaultAngles;
+    const angles = p.angles && p.angles.length ? p.angles : normalAngles;
     const rots: RotShape[] = [];
     for (const a of angles) {
       const r = buildRotation(p.contours, a, cell, radius);
       if (r) rots.push(r);
     }
-    if (!rots.length) continue;
-    // Un giro de 15° en una pieza de 220×18 dispara su caja a 168×168 y
-    // desperdicia media plancha. Probamos ángulos libres solo si no inflan
-    // demasiado el contorno; los múltiplos de 90° siempre se prueban.
-    const minBox = Math.min(...rots.map((r) => r.width * r.height));
-    const useful = rots.filter(
-      (r) => Math.abs(r.angle % 90) < 1e-6 || r.width * r.height <= minBox * 1.35,
-    );
-    rotationCache[i] = useful.length ? useful : rots;
+    rotationCache[i] = rots;
     instances.push({
       partIndex: i,
-      area: rots[0].area,
-      maxSide: Math.max(rots[0].width, rots[0].height),
-      width: rots[0].width,
-      height: rots[0].height,
+      area: rots[0]?.area || 1,
+      maxSide: Math.max(rots[0]?.width || p.width, rots[0]?.height || p.height),
+      width: rots[0]?.width || p.width,
+      height: rots[0]?.height || p.height,
       copies: Math.max(0, Math.floor(p.copies)),
     });
   }
@@ -521,33 +527,60 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
     pinnedArea += rot.area;
   }
 
-  let bestRun: RunResult | null = null;
   const method = options.method ?? "auto";
   const runs = QUALITY_RUNS[options.quality];
-  const rand = mulberry32(0x1a5e4ca7);
-  for (let run = 0; run < runs; run++) {
-    if (run > 0 && Date.now() > budgetEnd) break;
-    const ordered = method === "greedy"
-      ? ordering(instances, 0, rand)
-      : method === "largest"
-        ? ordering(instances, 1, rand)
-        : method === "voronoi"
-          ? ordering(instances, 2 + (run % 3), rand)
-          : ordering(instances, run, rand);
-    const res = placeRun(
-      ordered,
-      rotationCache,
-      usableW,
-      usableH,
-      cell,
-      sheetsAllowed,
-      pinned,
-      pinnedArea,
-      options.compact !== false && options.quality !== "rapida" && pinned.length === 0,
-      budgetEnd,
-    );
-    if (!bestRun || res.score < bestRun.score) bestRun = res;
+  const totalBudget = QUALITY_BUDGET[options.quality];
+
+  const runStage = (cache: RotShape[][], deadline: number): RunResult | null => {
+    let best: RunResult | null = null;
+    const rand = mulberry32(0x1a5e4ca7);
+    for (let run = 0; run < runs; run++) {
+      if (run > 0 && Date.now() > deadline) break;
+      const ordered = method === "greedy"
+        ? ordering(instances, 0, rand)
+        : method === "largest"
+          ? ordering(instances, 1, rand)
+          : method === "voronoi"
+            ? ordering(instances, 2 + (run % 3), rand)
+            : ordering(instances, run, rand);
+      const res = placeRun(
+        ordered,
+        cache,
+        usableW,
+        usableH,
+        cell,
+        sheetsAllowed,
+        pinned,
+        pinnedArea,
+        options.compact !== false && options.quality !== "rapida" && pinned.length === 0,
+        deadline,
+      );
+      if (!best || res.score < best.score) best = res;
+    }
+    return best;
+  };
+
+  // Fase 1: ángulos normales (0/90/180/270). Es la más rápida.
+  let bestRun = runStage(rotationCache, started + totalBudget * (options.rotation === "libre" ? 0.62 : 1));
+
+  // Fase 2: si aún queda algo sin colocar, probar diagonales (45/135/225/315).
+  if ((!bestRun || bestRun.unplaced > 0) && options.rotation === "libre" && broadAngles.length > normalAngles.length) {
+    const broadCache: RotShape[][] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (!p.contours.length || p.width <= 0 || p.height <= 0 || p.copies <= 0) continue;
+      const angles = p.angles && p.angles.length ? p.angles : broadAngles;
+      const rots: RotShape[] = [];
+      for (const a of angles) {
+        const r = buildRotation(p.contours, a, cell, radius);
+        if (r) rots.push(r);
+      }
+      if (rots.length) broadCache[i] = rots;
+    }
+    const broad = runStage(broadCache, started + totalBudget);
+    if (broad && (!bestRun || broad.score < bestRun.score)) bestRun = broad;
   }
+
   if (!bestRun) {
     bestRun = {
       placements: [],

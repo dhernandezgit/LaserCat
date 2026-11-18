@@ -298,7 +298,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 59 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
+npm test           # 63 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -335,7 +335,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 59 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
+npm test           # 63 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:

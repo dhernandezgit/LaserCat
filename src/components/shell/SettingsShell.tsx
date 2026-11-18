@@ -355,7 +355,7 @@ export function SettingsShell({
             <div className="preset-line"><span>{stats.placed} piezas · {stats.pages} plancha{stats.pages === 1 ? "" : "s"}</span><span>{formatDuration(stats.timeSeconds)}</span></div>
             <div className="preset-line"><span>Método</span><span>{methodLabel[sheet.method ?? "auto"]}</span></div>
             <div className="preset-line"><span>Orientaciones usadas</span><span>{angleText}</span></div>
-            <div className="preset-line"><span>Orientaciones probadas</span><span>{sheet.rotation === "libre" ? "8 (0°–315°)" : sheet.rotation === "90" ? "4 (0°/90°/180°/270°)" : "1 (0°)"}</span></div>
+            <div className="preset-line"><span>Orientaciones disponibles</span><span>{sheet.rotation === "libre" ? "8 (0°–315°)" : sheet.rotation === "90" ? "4 (0°/90°/180°/270°)" : "1 (0°)"}</span></div>
             <span className="micro-help">El aprovechamiento es la superficie real de las siluetas; los huecos no cuentan.</span>
             {sheet.width > machine.workWidth || sheet.height > machine.workHeight ? (
               <span style={{ color: "var(--danger)" }}>La plancha supera el área de {machine.name}.</span>
