@@ -1040,3 +1040,20 @@ input[type="range"] { accent-color: var(--accent2); }
 @media (max-width: 900px) {
   .unplaced-banner { font-size: 10px; padding-left: 9px; gap: 5px; }
 }
+
+.wood3d-reset {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--textSoft);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wood3d-reset:hover { border-color: var(--accent); color: var(--accent3); }

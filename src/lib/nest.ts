@@ -20,19 +20,19 @@ import { contoursBounds, rotateContours, translateContours } from "./geom";
 export const QUALITY_CELL: Record<Quality, number> = {
   rapida: 2,
   equilibrada: 1.25,
-  maxima: 0.8,
+  maxima: 0.95,
 };
 
 const QUALITY_BUDGET: Record<Quality, number> = {
   rapida: 600,
-  equilibrada: 2000,
-  maxima: 4500,
+  equilibrada: 1800,
+  maxima: 3200,
 };
 
 const QUALITY_RUNS: Record<Quality, number> = {
   rapida: 1,
   equilibrada: 3,
-  maxima: 6,
+  maxima: 4,
 };
 
 interface RotShape {
@@ -175,9 +175,7 @@ function buildRotation(contours: Contour[], angle: number, cell: number, radiusC
 function anglesFor(mode: RotationMode, quality: Quality): number[] {
   if (mode === "no") return [0];
   if (mode === "90") return [0, 90, 180, 270];
-  if (quality === "rapida") return [0, 45, 90, 135, 180, 225, 270, 315];
-  if (quality === "equilibrada") return Array.from({ length: 12 }, (_, i) => i * 30);
-  return Array.from({ length: 24 }, (_, i) => i * 15);
+  return [0, 45, 90, 135, 180, 225, 270, 315];
 }
 
 interface RunPlacement {
@@ -278,19 +276,36 @@ function placeRun(
     mark(ensureSheet(pin.page), pin.rot, pin.gx - pin.rot.pad, pin.gy - pin.rot.pad);
   }
 
+  /**
+   * Busca el mejor hueco probando TODAS las rotaciones, no la primera que
+   * quepa. Antes, el ángulo 0 casi siempre encontraba un sitio y los demás
+   * ángulos nunca se usaban; por eso el aprovechamiento era pobre.
+   */
   const findSpot = (sheet: GridSheet, rots: RotShape[]): { rot: RotShape; sx: number; sy: number } | null => {
+    let best: { rot: RotShape; sx: number; sy: number } | null = null;
+    let bestScore = Infinity;
     for (const rot of rots) {
       const minX = -rot.pad;
       const minY = -rot.pad;
       const maxX = sheet.gw - rot.pad - rot.gridW;
       const maxY = sheet.gh - rot.pad - rot.gridH;
-      for (let sy = minY; sy <= maxY; sy++) {
+      let found = false;
+      for (let sy = minY; sy <= maxY && !found; sy++) {
         for (let sx = minX; sx <= maxX; sx++) {
-          if (fits(sheet, rot, sx, sy)) return { rot, sx, sy };
+          if (!fits(sheet, rot, sx, sy)) continue;
+          // Prioriza arriba/izquierda; a igualdad, prefiere el ángulo más simple.
+          const anglePenalty = rot.angle === 0 ? 0 : rot.angle % 90 === 0 ? 0.25 : 0.5;
+          const score = sy * 100000 + sx * 100 + anglePenalty;
+          if (score < bestScore) {
+            bestScore = score;
+            best = { rot, sx, sy };
+          }
+          found = true;
+          break;
         }
       }
     }
-    return null;
+    return best;
   };
 
   for (const inst of instances) {
@@ -338,6 +353,38 @@ function placeRun(
         }
       }
       if (!placed) unplaced++;
+    }
+  }
+
+  // Recoger piezas de planchas extra que quepan en huecos de planchas anteriores.
+  if (!pinned.length && sheets.length > 1) {
+    for (let s = sheets.length - 1; s > 0; s--) {
+      const list = placements.filter((p) => p.sheet === s);
+      list.sort((a, b) => a.rot.area - b.rot.area);
+      for (const p of list) {
+        if (Date.now() > budgetEnd) break;
+        const oldSheet = sheets[s];
+        unmark(oldSheet, p.rot, p.gx - p.rot.pad, p.gy - p.rot.pad);
+        let moved = false;
+        for (let t = 0; t < s; t++) {
+          const spot = findSpot(sheets[t], rotations[p.partIndex] || []);
+          if (!spot) continue;
+          mark(sheets[t], spot.rot, spot.sx, spot.sy);
+          p.sheet = t;
+          p.angle = spot.rot.angle;
+          p.gx = spot.sx + spot.rot.pad;
+          p.gy = spot.sy + spot.rot.pad;
+          p.rot = spot.rot;
+          moved = true;
+          break;
+        }
+        if (!moved) mark(oldSheet, p.rot, p.gx - p.rot.pad, p.gy - p.rot.pad);
+      }
+    }
+    while (sheets.length > 1) {
+      const last = sheets.length - 1;
+      if (placements.some((p) => p.sheet === last)) break;
+      sheets.pop();
     }
   }
 
@@ -437,7 +484,14 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       if (r) rots.push(r);
     }
     if (!rots.length) continue;
-    rotationCache[i] = rots;
+    // Un giro de 15° en una pieza de 220×18 dispara su caja a 168×168 y
+    // desperdicia media plancha. Probamos ángulos libres solo si no inflan
+    // demasiado el contorno; los múltiplos de 90° siempre se prueban.
+    const minBox = Math.min(...rots.map((r) => r.width * r.height));
+    const useful = rots.filter(
+      (r) => Math.abs(r.angle % 90) < 1e-6 || r.width * r.height <= minBox * 1.35,
+    );
+    rotationCache[i] = useful.length ? useful : rots;
     instances.push({
       partIndex: i,
       area: rots[0].area,

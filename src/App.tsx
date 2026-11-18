@@ -59,8 +59,8 @@ export default function App() {
   }, [theme]);
 
   const wood3dOptions = useMemo(
-    () => ({ ...previewOptions, depthMm: doc.settings.wood3dDepth ?? 3, cutAway: doc.settings.wood3dCut !== false }),
-    [previewOptions, doc.settings.wood3dDepth, doc.settings.wood3dCut],
+    () => ({ ...previewOptions, depthMm: doc.settings.wood3dDepth ?? 3 }),
+    [previewOptions, doc.settings.wood3dDepth],
   );
 
   const stats = useMemo(() => computeStats(doc), [doc]);
@@ -437,6 +437,7 @@ export default function App() {
 
       <StatusShell
         doc={doc}
+        stats={stats}
         message={message}
         busy={busy}
         progress={0.6}

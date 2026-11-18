@@ -332,6 +332,11 @@ export function DesignPanel({
           const fold = openFold[group.id];
           const ops = Array.from(new Set(parts.map((p) => p.operation)));
           const border = parts.length ? Math.max(...parts.map((p) => p.offsetMm)) : 0;
+          const angles = Array.from(new Set(
+            doc.placements
+              .filter((pl) => pl.assemblyId === group.id && Math.round(pl.angle) % 360 !== 0)
+              .map((pl) => Math.round(pl.angle) % 360),
+          )).slice(0, 3);
           return (
             <div
               className={`asset-card${active ? " sel" : ""}`}
@@ -385,6 +390,7 @@ export function DesignPanel({
                     </span>
                   ))}
                   {parts.some((p) => p.kind === "raster") && <span className="chip engrave">imagen</span>}
+                  {angles.map((a) => <span className="chip" key={a}>{a}°</span>)}
                 </div>
                 <div className="copies-row">
                   <span className="cap">Copias</span>
@@ -510,6 +516,11 @@ export function DesignPanel({
           const active = sel.has(part.id);
           const count = doc.placements.filter((p) => p.partId === part.id).length;
           const fold = openFold[part.id];
+          const angles = Array.from(new Set(
+            doc.placements
+              .filter((pl) => pl.partId === part.id && Math.round(pl.angle) % 360 !== 0)
+              .map((pl) => Math.round(pl.angle) % 360),
+          )).slice(0, 3);
           return (
             <div
               className={`asset-card${active ? " sel" : ""}`}
@@ -545,6 +556,7 @@ export function DesignPanel({
                   <span className={`chip ${part.operation}`}>{OP_LABEL[part.operation]}</span>
                   {part.kind === "raster" && <span className="chip engrave">imagen</span>}
                   {part.offsetMm > 0 && <span className="chip">+{fmt(part.offsetMm)} borde</span>}
+                  {angles.map((a) => <span className="chip" key={a}>{a}°</span>)}
                 </div>
                 <div className="copies-row">
                   <span className="cap">Copias</span>

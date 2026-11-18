@@ -149,7 +149,6 @@ export interface DocSettings {
   imageDropMode?: ImageDropMode;
   compact?: boolean;
   wood3dDepth?: number;
-  wood3dCut?: boolean;
   /** Ajustes de exportaciÃ³n. */
   exportBridges: boolean;
   bridgeCount: number;

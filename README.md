@@ -98,7 +98,7 @@ Arranca con el tema **Eevee**.
 
 ### Vista en madera
 
-- **Vista 3D** del tablero con profundidad configurable (**3 mm por defecto**) y opción de mostrar los huecos y las piezas ya retiradas.
+- **Vista 3D de las piezas recortadas**: profundidad configurable (**3 mm por defecto**), órbita con arrastre, inclinación y zoom con la rueda. No muestra el tablero sobrante.
 - **9 maderas**: tilo, abedul, roble, nogal, cerezo, bambÃº, DM/MDF, pino y cartÃ³n.
 - **5 tonos de lÃ¡ser**: miel, cafÃ©, carbÃ³n, gris y rojizo, para comparar el mismo trabajo con
   distintas quemaduras.
@@ -111,7 +111,7 @@ Arranca con el tema **Eevee**.
 
 ![Comparador de 4 maderas y 4 intensidades](docs/comparador.png)
 
-![Vista 3D de la madera con las piezas retiradas](docs/3d.png)
+![Vista 3D de las piezas recortadas](docs/3d.png)
 
 ### Temas y aspecto
 
@@ -196,7 +196,7 @@ derecha y **barra de estado** abajo. Los tres paneles tienen separadores arrastr
 | **Visor** | Plancha/madera, arrastrar, girar, fijar, zoom, pÃ¡ginas, Optimizar y Guardar/Exportar. |
 | **Ajustes â†’ General** | Plancha, presets A4/A3/A5/Letter, margen, separaciÃ³n, kerf, rotaciÃ³n, calidad y mÃ©todo. |
 | **Ajustes â†’ OptimizaciÃ³n** | MÃ©todo, forma real/rectÃ¡ngulos, compactaciÃ³n y recÃ¡lculo. |
-| **Ajustes → Material → 3D** | Grosor del tablero, piezas retiradas y vista 3D. |
+| **Ajustes → Material → 3D** | Grosor, órbita y piezas recortadas en 3D. |
 | **Ajustes â†’ Borde / Imagen / Material** | Offset global, importaciÃ³n de imÃ¡genes, madera, tonos, potencia y tarjeta de pruebas. |
 | **Ajustes â†’ Vista y tema** | 12 temas CryCat, cuadrÃ­cula y leyenda de capas. |
 | **Barra inferior** | CÃ³mo usar, reportar, apoyar, versiÃ³n y estado del taller. |
@@ -298,7 +298,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 57 tests (geometrÃ­a, importador SVG con imÃ¡genes, figuras, nesting, export, store, tarjeta)
+npm test           # 59 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -317,7 +317,7 @@ src/
     nest.ts          empaquetado por forma real (mÃ©todos + compactaciÃ³n)
     assembly.ts      figuras/ensamblajes, geometrÃ­a combinada y rotaciÃ³n
     groupLibrary.ts  biblioteca, JSON y ZIP por figura
-    wood3d.ts        proyección 3D, grosor y piezas retiradas
+    wood3d.ts        proyección 3D de piezas, grosor y órbita
     themes.ts        los 12 temas pastel de CryCat
     laser.ts         mÃ¡quinas, materiales, capas, kerf y tiempos
     export.ts        SVG para LightBurn, puentes, ZIP y LEEME
@@ -335,7 +335,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test
+npm test           # 59 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:

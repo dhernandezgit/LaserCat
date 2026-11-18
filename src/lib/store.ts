@@ -41,7 +41,6 @@ export const DEFAULT_SETTINGS: DocSettings = {
   imageDropMode: "cut",
   compact: true,
   wood3dDepth: 3,
-  wood3dCut: true,
   exportBridges: false,
   bridgeCount: 4,
   bridgeWidth: 2.5,

@@ -213,6 +213,10 @@ export function SettingsShell({
   };
   const qualityLabel: Record<Quality, string> = { rapida: "Rápida", equilibrada: "Normal", maxima: "Exacta" };
   const rotationLabel: Record<RotationMode, string> = { no: "Sin girar", "90": "90° y múltiplos", libre: "Cualquier ángulo" };
+  const usedAngles = Array.from(new Set(
+    doc.placements.map((p) => Math.round(p.angle) % 360),
+  )).sort((a, b) => a - b);
+  const angleText = usedAngles.length ? `${usedAngles.join("° / ")}°` : "0°";
 
   return (
     <div className="settings-panel">
@@ -349,6 +353,10 @@ export function SettingsShell({
           <div className="machine-box">
             <div className="preset-line"><b>Aprovechamiento</b><span>{Math.round(stats.efficiency * 100)} %</span></div>
             <div className="preset-line"><span>{stats.placed} piezas · {stats.pages} plancha{stats.pages === 1 ? "" : "s"}</span><span>{formatDuration(stats.timeSeconds)}</span></div>
+            <div className="preset-line"><span>Método</span><span>{methodLabel[sheet.method ?? "auto"]}</span></div>
+            <div className="preset-line"><span>Orientaciones usadas</span><span>{angleText}</span></div>
+            <div className="preset-line"><span>Orientaciones probadas</span><span>{sheet.rotation === "libre" ? "8 (0°–315°)" : sheet.rotation === "90" ? "4 (0°/90°/180°/270°)" : "1 (0°)"}</span></div>
+            <span className="micro-help">El aprovechamiento es la superficie real de las siluetas; los huecos no cuentan.</span>
             {sheet.width > machine.workWidth || sheet.height > machine.workHeight ? (
               <span style={{ color: "var(--danger)" }}>La plancha supera el área de {machine.name}.</span>
             ) : (
@@ -509,28 +517,17 @@ export function SettingsShell({
             <button type="button" className="cc-btn" onClick={() => onView("wood")}>Ver en madera</button>
             <button type="button" className="cc-btn primary" onClick={() => onView("wood3d")}>Ver en 3D</button>
           </div>
-          <div className="two">
-            <div className="ctl">
-              <label>Grosor / profundidad</label>
-              <input
-                type="range"
-                min={0.5}
-                max={12}
-                step={0.5}
-                value={settings.wood3dDepth ?? 3}
-                onChange={(e) => setSettings({ wood3dDepth: Number(e.target.value) })}
-              />
-              <span className="hint">{(settings.wood3dDepth ?? 3).toFixed(1)} mm</span>
-            </div>
-            <div className="ctl">
-              <label>Piezas recortadas</label>
-              <ToggleLine
-                checked={settings.wood3dCut !== false}
-                onChange={(v) => setSettings({ wood3dCut: v })}
-                label="Ver huecos y piezas retiradas"
-              />
-              <span className="hint">Desactívalo para ver el tablero antes de retirar las piezas.</span>
-            </div>
+          <div className="ctl">
+            <label>Grosor / profundidad</label>
+            <input
+              type="range"
+              min={0.5}
+              max={12}
+              step={0.5}
+              value={settings.wood3dDepth ?? 3}
+              onChange={(e) => setSettings({ wood3dDepth: Number(e.target.value) })}
+            />
+            <span className="hint">{(settings.wood3dDepth ?? 3).toFixed(1)} mm · arrastra en la vista 3D para orbitar y usa la rueda para acercar.</span>
           </div>
           <div className="two">
             <button type="button" className="cc-btn" onClick={onCompare}>Comparar 4 × 4</button>

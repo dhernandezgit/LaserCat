@@ -1,8 +1,10 @@
-import type { Doc } from "../../types";
+import type { Doc, SheetStats } from "../../types";
+import { formatDuration } from "../../lib/laser";
 import { Icon } from "../UI";
 
 export function StatusShell({
   doc,
+  stats,
   message,
   busy,
   onHelp,
@@ -11,6 +13,7 @@ export function StatusShell({
   progress,
 }: {
   doc: Doc;
+  stats: SheetStats;
   message: string;
   busy?: boolean;
   onHelp: () => void;
@@ -43,6 +46,11 @@ export function StatusShell({
         <button className="app-info support" onClick={onSupport} title="Ver el repositorio de LaserCat">
           <Icon name="external" size={13} /> Apoyar
         </button>
+        {stats.placed > 0 && (
+          <span className="version-chip" title="Tiempo estimado de corte y grabado">
+            <Icon name="flame" size={12} /> {formatDuration(stats.timeSeconds)}
+          </span>
+        )}
         <span className="version-chip" title="Versión de LaserCat">v1.0</span>
         <span className="version-chip" title={doc.settings.machineId}>
           <span className="dot" /> {busy ? "Corte" : "Listo"}

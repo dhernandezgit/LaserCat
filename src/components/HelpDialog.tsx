@@ -189,7 +189,7 @@ export function HelpDialog({ open, doc, onClose, initialSection = "inicio" }: { 
               <h3>Tonos de quemado</h3>
               <p>En <b>Material → Tono del láser</b> puedes simular el mismo trabajo en <b>miel, café, carbón, gris o rojizo</b>. El tono afecta a la simulación, no al archivo de corte; la potencia y la madera mandan en el resultado real.</p>
               <h3>Vista 3D y corte</h3>
-              <p>En <b>Material</b> pulsa <b>Ver en 3D</b>. Ajusta el <b>grosor</b> (3 mm por defecto) y activa o desactiva <b>Ver huecos y piezas retiradas</b> para ver el tablero antes o después de retirar las piezas.</p>
+              <p>En <b>Material</b> pulsa <b>Ver en 3D</b>. Ajusta el <b>grosor</b> (3 mm por defecto), arrastra para orbitar y usa la rueda para acercar. La vista muestra las <b>piezas recortadas</b>, no el tablero sobrante.</p>
             </>
           )}
 
