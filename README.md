@@ -17,7 +17,8 @@ previsualiza el resultado en distintas maderas y exporta SVG en milÃ­metros li
 Hecho para diodos como la **SculpFun S30 (10 W)**, con **tilo de 3 mm** como material de partida.
 Funciona con cualquier lÃ¡ser y cualquier plancha. La interfaz copia la disposiciÃ³n y el flujo de
 **CryCat** (tres columnas, tarjetas, barra inferior y temas pastel), adaptada al corte y grabado lÃ¡ser.
-Arranca con el tema **Eevee**.
+Arranca con el tema **Eevee** y con un **puzzle de madera ya resuelto**: piezas irregulares que
+encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **0 mm de margen, separaciÃ³n y kerf**.
 
 - ðŸŒ **App:** https://dhernandezgit.github.io/LaserCat/
 - ðŸ“¦ **Repo:** https://github.com/dhernandezgit/LaserCat
@@ -32,12 +33,16 @@ Arranca con el tema **Eevee**.
 
 ### Plancha y empaquetado
 
-- **Plancha de 300 Ã— 300 mm por defecto**, con margen de seguridad de **5 mm** y separaciÃ³n de **3 mm**.
+- **Puzzle de madera de ejemplo** de 300 Ã— 300 mm, resuelto al **100 %** y con **0 mm de margen,
+  separaciÃ³n y kerf**. Usa entre **14 y 26 piezas** irregulares; el botÃ³n âœ¦ junto a
+  **Piezas** crea otro puzzle exacto con un nÃºmero distinto de piezas.
+- Para proyectos nuevos, **plancha de 300 Ã— 300 mm**, margen de seguridad de **5 mm** y
+  separaciÃ³n de **3 mm**.
 - **Empaquetado por forma real**, no por cajas: se rasteriza cada pieza y se comprueba la colisiÃ³n
-  con su geometrÃ­a, asÃ­ que una estrella puede encajar junto a la oreja de un gato.
+  con su geometrÃ­a, asÃ­ que una pieza en L puede encajar junto a una silueta hueca.
 - **4 mÃ©todos de colocaciÃ³n** (Greedy/Bottom-Left, Largest First, Voronoi/huecos libres y GenÃ©tico),
   **3 calidades** (RÃ¡pida / Normal / **Exacta**) y **compactaciÃ³n** posterior tipo DeepNest.
-- **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias** y **mÃºltiples planchas**. En **forma real** se usan todos los ángulos por defecto; **Rectángulos** limita a 90° para ir más rápido.
+- **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias** y **mÃºltiples planchas**. En **forma real** empieza por 0Â°/90Â°/180Â°/270Â° y, si algo no cabe, prueba diagonales de 45Â°; **RectÃ¡ngulos** limita a 90Â° para ir mÃ¡s rÃ¡pido.
 - **Kerf** configurable: el corte se compensa hacia el desperdicio para que la pieza final mida lo que debe.
 - **Fijar piezas** con el pin (o al arrastrarlas): el resto se recoloca alrededor.
 - Aprovechamiento, nÃºmero de planchas y **tiempo estimado** de corte/grabado en directo.
@@ -298,7 +303,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 63 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
+npm test           # 68 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -335,7 +340,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 63 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, export, store, tarjeta)
+npm test           # 68 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:
@@ -408,4 +413,7 @@ Defaults: SculpFun S30 10 W, 300 Ã— 300 mm sheet, 5 mm margin, basswood 3 mm.
 theme, with Sylveon, Leafeon, Vaporeon, Umbreon and Taller available. No server, no account, no uploads.
 
 Built by **Daniel HernÃ¡ndez FerrÃ¡ndiz**. MIT licensed.
+
+
+
 

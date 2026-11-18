@@ -175,6 +175,8 @@ export interface Doc {
   groups?: Assembly[];
   sheet: Sheet;
   settings: DocSettings;
+  /** Semilla del puzzle de madera de ejemplo, si el proyecto es ese demo. */
+  puzzleSeed?: number;
   createdAt: number;
   updatedAt: number;
 }

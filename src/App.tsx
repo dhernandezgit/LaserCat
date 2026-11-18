@@ -378,6 +378,7 @@ export default function App() {
             onSaveGroup={saveGroup}
             onExportGroup={exportGroup}
             onOpenLibrary={() => setLibraryOpen(true)}
+            onNewPuzzle={() => dispatch({ type: "LOAD_PUZZLE" })}
           />
         </div>
         <div className="splitter" onMouseDown={() => startDrag("left")} />

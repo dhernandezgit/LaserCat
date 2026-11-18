@@ -6,7 +6,7 @@ import { assemblyGeometry, getGroups } from "../../lib/assembly";
 import { groupParts, groupThumbnail } from "../../lib/groupLibrary";
 import { fmt } from "../../lib/geom";
 import { PartThumb } from "../PartThumb";
-import { Icon } from "../UI";
+import { Icon, IconButton } from "../UI";
 
 const OP_LABEL: Record<Operation, string> = { cut: "Corte", engrave: "Grabado", score: "Marcado" };
 
@@ -21,6 +21,7 @@ export function DesignPanel({
   onSaveGroup,
   onExportGroup,
   onOpenLibrary,
+  onNewPuzzle,
 }: {
   doc: Doc;
   dispatch: Dispatch<Action>;
@@ -32,6 +33,7 @@ export function DesignPanel({
   onSaveGroup: (group: Assembly) => void;
   onExportGroup: (group: Assembly) => void;
   onOpenLibrary: () => void;
+  onNewPuzzle: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [over, setOver] = useState(false);
@@ -40,6 +42,7 @@ export function DesignPanel({
   const groups = getGroups(doc);
   const groupedIds = useMemo(() => new Set(groups.flatMap((g) => g.members.map((m) => m.partId))), [groups]);
   const ungrouped = doc.parts.filter((p) => !groupedIds.has(p.id));
+  const demoMode = !doc.parts.length || doc.puzzleSeed !== undefined;
   const sel = new Set(selection.partIds);
   const selectedGroups = groups.filter((g) => g.members.some((m) => sel.has(m.partId)));
   const selectedCount = selection.partIds.length;
@@ -187,6 +190,14 @@ export function DesignPanel({
           Ctrl/Shift+clic = varios
         </span>
         <span className="count-badge">{groups.length + ungrouped.length}</span>
+        {demoMode && (
+          <IconButton
+            icon="sparkles"
+            size={14}
+            title="Generar otro puzzle de madera con distinto número de piezas"
+            onClick={onNewPuzzle}
+          />
+        )}
       </div>
 
       <div
@@ -319,6 +330,9 @@ export function DesignPanel({
             <span>Arrastra un SVG con imágenes o una imagen, o crea una forma desde Ajustes.</span>
             <button type="button" className="cc-btn" onClick={onOpenSvgDialog}>
               Elegir un SVG
+            </button>
+            <button type="button" className="cc-btn" onClick={onNewPuzzle}>
+              Cargar puzzle de madera
             </button>
           </div>
         )}

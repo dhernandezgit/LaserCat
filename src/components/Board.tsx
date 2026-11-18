@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
 import type { Dispatch } from "react";
-import type { Doc, Part, Placement, SelectionState } from "../types";
+import type { Contour, Doc, Part, Placement, SelectionState } from "../types";
 import type { Action } from "../lib/store";
+import { clipperArea, intersectContours } from "../lib/clipper";
 import { contoursToPath, fmt } from "../lib/geom";
 import { effectiveGeometry, placeEffective } from "../lib/laser";
 import { Icon, IconButton } from "./UI";
@@ -13,6 +14,8 @@ interface Box {
   y: number;
   w: number;
   h: number;
+  outer: Contour[];
+  assemblyId?: string;
 }
 
 export function Board({
@@ -52,7 +55,16 @@ export function Board({
       const part = partsById.get(pl.partId);
       if (!part) continue;
       const g = placeEffective(part, pl);
-      out.push({ id: pl.id, part, x: pl.x, y: pl.y, w: g.rotatedW, h: g.rotatedH });
+      out.push({
+        id: pl.id,
+        part,
+        x: pl.x,
+        y: pl.y,
+        w: g.rotatedW,
+        h: g.rotatedH,
+        outer: g.outer,
+        assemblyId: pl.assemblyId,
+      });
     }
     return out;
   }, [placements, partsById]);
@@ -63,11 +75,16 @@ export function Board({
       for (let j = i + 1; j < boxes.length; j++) {
         const a = boxes[i];
         const b = boxes[j];
+        if (a.assemblyId && a.assemblyId === b.assemblyId) continue;
         const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
         const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-        if (ox > 0.5 && oy > 0.5) {
-          set.add(a.id);
-          set.add(b.id);
+        // Las cajas pueden solaparse aunque las siluetas encajen (p. ej. un
+        // puzzle). Solo marcamos las piezas cuya superficie real se cruza.
+        if (ox > 0.01 && oy > 0.01) {
+          if (clipperArea(intersectContours(a.outer, b.outer)) > 0.05) {
+            set.add(a.id);
+            set.add(b.id);
+          }
         }
       }
     }

@@ -309,7 +309,8 @@ export function packingSize(part: Part): { width: number; height: number } {
 }
 
 export function partOuterArea(part: Part): number {
-  return shapeArea(effectiveGeometry(part).outer);
+  // Con huecos (por ejemplo un anillo) hay que restar su superficie.
+  return clipperArea(effectiveGeometry(part).outer);
 }
 
 // ------------------------------------------------------------------ tiempo --

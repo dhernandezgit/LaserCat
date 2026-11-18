@@ -11,9 +11,10 @@ import type {
   SelectionState,
   Sheet,
 } from "../types";
-import { demoParts } from "./demo";
+import { makePuzzleDemo, PUZZLE_SIZE } from "./puzzle";
 import { rotatedSize, rotatePt, rectContour } from "./geom";
-import { effectiveGeometry } from "./laser";
+import { clipperArea, intersectContours } from "./clipper";
+import { effectiveGeometry, partOuterArea, placeEffective } from "./laser";
 import { nestParts } from "./nest";
 import type { NestResult } from "../types";
 import { assemblyGeometry, assemblyFromPlacements, getGroups, normalizeMembers, rotatePlacements } from "./assembly";
@@ -119,6 +120,7 @@ export type Action =
   | { type: "CLEAR" }
   | { type: "RENAME"; name: string }
   | { type: "LOAD_PROJECT"; doc: Doc }
+  | { type: "LOAD_PUZZLE"; seed?: number }
   | { type: "SELECT"; partIds?: string[]; placementIds?: string[] }
   | { type: "UNDO" }
   | { type: "REDO" }
@@ -137,12 +139,74 @@ function nextId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36).slice(-4)}`;
 }
 
+/**
+ * Comprueba si el puzzle de ejemplo ya está resuelto al 100 %. En ese caso no
+ * hace falta volver a empaquetarlo: conservar la solución es instantáneo y
+ * garantiza que el demo nunca pierda su encaje exacto.
+ */
+function completeDemoEfficiency(doc: Doc): number | null {
+  if (!doc.parts.length || doc.parts.length > 80) return null;
+  if (doc.parts.some((p) => p.source !== "demo" || p.copies !== 1)) return null;
+  if (doc.placements.length !== doc.parts.length) return null;
+  if ((doc.groups || []).some((g) => g.copies !== 1)) return null;
+  const byPart = new Map(doc.placements.map((p) => [p.partId, p]));
+  if (byPart.size !== doc.parts.length) return null;
+  const { margin, width, height } = doc.sheet;
+  const usableW = Math.max(1, width - margin * 2);
+  const usableH = Math.max(1, height - margin * 2);
+  let area = 0;
+  const placed: { pl: Placement; outer: ReturnType<typeof placeEffective>["outer"]; w: number; h: number; assemblyId?: string }[] = [];
+  for (const part of doc.parts) {
+    const pl = byPart.get(part.id);
+    if (!pl) return null;
+    const g = placeEffective(part, pl);
+    if (
+      pl.x < margin - 0.01 ||
+      pl.y < margin - 0.01 ||
+      pl.x + g.rotatedW > width - margin + 0.01 ||
+      pl.y + g.rotatedH > height - margin + 0.01
+    ) {
+      return null;
+    }
+    area += partOuterArea(part);
+    placed.push({ pl, outer: g.outer, w: g.rotatedW, h: g.rotatedH, assemblyId: pl.assemblyId });
+  }
+  const usable = usableW * usableH;
+  if (Math.abs(area - usable) > Math.max(0.5, usable * 0.0001)) return null;
+
+  for (let i = 0; i < placed.length; i++) {
+    for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i];
+      const b = placed[j];
+      if (a.assemblyId && a.assemblyId === b.assemblyId) continue;
+      const ox = Math.min(a.pl.x + a.w, b.pl.x + b.w) - Math.max(a.pl.x, b.pl.x);
+      const oy = Math.min(a.pl.y + a.h, b.pl.y + b.h) - Math.max(a.pl.y, b.pl.y);
+      if (ox <= 0.01 || oy <= 0.01) continue;
+      if (clipperArea(intersectContours(a.outer, b.outer)) > 0.05) return null;
+    }
+  }
+  return Math.min(1, area / usable);
+}
+
 /** Recoloca todas las piezas no fijadas y devuelve el documento y el aviso. */
 export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
   if (!doc.parts.length) {
     return {
       doc: { ...doc, placements: [], updatedAt: now() },
       nest: { at: now(), unplaced: 0, efficiency: 0, pages: 1, elapsedMs: 0 },
+    };
+  }
+  const solved = completeDemoEfficiency(doc);
+  if (solved !== null) {
+    return {
+      doc: { ...doc, updatedAt: now() },
+      nest: {
+        at: now(),
+        unplaced: 0,
+        efficiency: solved,
+        pages: Math.max(1, ...doc.placements.map((p) => p.page + 1)),
+        elapsedMs: 0,
+      },
     };
   }
   const partsById = new Map(doc.parts.map((p) => [p.id, p]));
@@ -315,20 +379,33 @@ function autoNestOrKeep(state: AppState, doc: Doc, key: string): AppState {
   return withDoc(state, doc, key);
 }
 
-export function createInitialDoc(): Doc {
-  const parts = demoParts();
-  const doc: Doc = {
+/** Puzzle de ejemplo, ya resuelto y con márgenes cero. */
+export function createPuzzleDoc(seed?: number): Doc {
+  const puzzle = makePuzzleDemo(seed);
+  return {
     version: 1,
-    name: "Primera plancha",
-    parts,
-    placements: [],
-    sheet: { ...DEFAULT_SHEET },
+    name: `Puzzle de madera · ${puzzle.pieceCount} piezas`,
+    parts: puzzle.parts,
+    placements: puzzle.placements,
+    groups: [],
+    sheet: {
+      ...DEFAULT_SHEET,
+      width: PUZZLE_SIZE.width,
+      height: PUZZLE_SIZE.height,
+      margin: 0,
+      spacing: 0,
+      kerf: 0,
+      singlePage: false,
+    },
     settings: { ...DEFAULT_SETTINGS },
+    puzzleSeed: puzzle.seed,
     createdAt: now(),
     updatedAt: now(),
   };
-  const res = nestDoc(doc);
-  return res.doc;
+}
+
+export function createInitialDoc(): Doc {
+  return createPuzzleDoc();
 }
 
 export function createEmptyDoc(): Doc {
@@ -346,7 +423,11 @@ export function createEmptyDoc(): Doc {
 }
 
 export function createInitialState(): AppState {
-  const stored = loadStoredDoc();
+  let stored = loadStoredDoc();
+  // Los proyectos antiguos que solo tenían el demo se actualizan al puzzle.
+  if (stored && stored.parts.length && stored.puzzleSeed === undefined && stored.parts.every((p) => p.source === "demo")) {
+    stored = null;
+  }
   const doc = stored || createInitialDoc();
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const tabParam = params?.get("tab");
@@ -366,7 +447,7 @@ export function createInitialState(): AppState {
       : {
           at: now(),
           unplaced: 0,
-          efficiency: 0,
+          efficiency: 1,
           pages: Math.max(1, ...doc.placements.map((p) => p.page + 1)),
           elapsedMs: 0,
         },
@@ -440,6 +521,7 @@ export function reducer(state: AppState, action: Action): AppState {
         : getGroups(state.doc);
       let doc: Doc = {
         ...state.doc,
+        puzzleSeed: addingReal ? undefined : state.doc.puzzleSeed,
         parts: [...baseParts, ...parts],
         placements: basePlacements,
         groups: [...baseGroups, ...incomingGroups.map((g) => ({
@@ -452,7 +534,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return autoNestOrKeep(state, doc, "add-parts");
     }
     case "ADD_SHAPE": {
-      const doc = { ...state.doc, parts: [...state.doc.parts, action.shape] };
+      const doc = { ...state.doc, puzzleSeed: undefined, parts: [...state.doc.parts, action.shape] };
       return autoNestOrKeep(state, doc, "add-shape");
     }
     case "SET_ALL_OFFSET": {
@@ -837,6 +919,7 @@ export function reducer(state: AppState, action: Action): AppState {
         parts: [],
         placements: [],
         groups: [],
+        puzzleSeed: undefined,
         name: state.doc.name,
         updatedAt: now(),
       };
@@ -861,6 +944,28 @@ export function reducer(state: AppState, action: Action): AppState {
         lastNest: res ? res.nest : null,
         selection: { partIds: [], placementIds: [] },
         ui: { ...state.ui, page: 0, toast: { text: "Proyecto cargado.", kind: "ok" } },
+      };
+    }
+    case "LOAD_PUZZLE": {
+      let doc = createPuzzleDoc(action.seed);
+      // Al pulsar el botón, cambia también el número de piezas.
+      if (action.seed === undefined && state.doc.parts.length && doc.parts.length === state.doc.parts.length) {
+        for (let i = 0; i < 5 && doc.parts.length === state.doc.parts.length; i++) doc = createPuzzleDoc();
+      }
+      return {
+        ...state,
+        doc,
+        past: [...state.past, state.doc].slice(-60),
+        future: [],
+        lastKey: "",
+        lastAt: 0,
+        lastNest: { at: now(), unplaced: 0, efficiency: 1, pages: 1, elapsedMs: 0 },
+        selection: { partIds: [], placementIds: [] },
+        ui: {
+          ...state.ui,
+          page: 0,
+          toast: { text: `Puzzle nuevo: ${doc.parts.length} piezas · 100 %`, kind: "ok" },
+        },
       };
     }
     case "SELECT": {
@@ -1068,6 +1173,7 @@ export function normalizeDoc(input: any): Doc | null {
     groups,
     sheet,
     settings,
+    puzzleSeed: Number.isFinite(Number(input.puzzleSeed)) ? Number(input.puzzleSeed) : undefined,
     createdAt: Number(input.createdAt) || now(),
     updatedAt: Number(input.updatedAt) || now(),
   };
