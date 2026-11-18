@@ -14,7 +14,7 @@ import type {
   RotationMode,
   PlacementMethod,
 } from "../types";
-import { clipperArea } from "./clipper";
+import { clipperArea, intersectContours } from "./clipper";
 import { contoursBounds, rotateContours, translateContours } from "./geom";
 
 export const QUALITY_CELL: Record<Quality, number> = {
@@ -203,6 +203,8 @@ interface PinnedRaster {
   angle: number;
   gx: number;
   gy: number;
+  x: number;
+  y: number;
   page: number;
   rot: RotShape;
 }
@@ -214,6 +216,66 @@ interface RunResult {
   score: number;
   efficiency: number;
   usedArea: number;
+}
+
+/**
+ * La rejilla es una aproximación: una silueta muy fina o inclinada puede
+ * colarse entre celdas. Antes de devolver el resultado se comprueban las
+ * siluetas vectoriales reales y se retiran las piezas que se solapen.
+ */
+function guardVectorOverlaps(
+  result: RunResult,
+  pinned: PinnedRaster[],
+  margin: number,
+  cell: number,
+): RunResult {
+  const fresh = result.placements.map((p, i) => {
+    const x = Math.round((margin + p.gx * cell) * 100) / 100;
+    const y = Math.round((margin + p.gy * cell) * 100) / 100;
+    const contours = translateContours(p.rot.contours, x, y);
+    const b = contoursBounds(contours);
+    return { key: `f${i}`, index: i, page: p.sheet, x, y, contours, b, area: p.rot.area, pinned: false };
+  });
+  const fixed = pinned.map((p, i) => {
+    const contours = translateContours(p.rot.contours, p.x, p.y);
+    const b = contoursBounds(contours);
+    return { key: `p${i}`, index: i, page: p.page, x: p.x, y: p.y, contours, b, area: p.rot.area, pinned: true };
+  });
+  const all = [...fresh, ...fixed];
+  const removedFresh = new Set<number>();
+
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i];
+    if (!a.pinned && removedFresh.has(a.index)) continue;
+    for (let j = i + 1; j < all.length; j++) {
+      const c = all[j];
+      if (!c.pinned && removedFresh.has(c.index)) continue;
+      if (a.page !== c.page) continue;
+      const ox = Math.min(a.b.x + a.b.w, c.b.x + c.b.w) - Math.max(a.b.x, c.b.x);
+      const oy = Math.min(a.b.y + a.b.h, c.b.y + c.b.h) - Math.max(a.b.y, c.b.y);
+      if (ox <= 0.01 || oy <= 0.01) continue;
+      if (clipperArea(intersectContours(a.contours, c.contours)) <= 0.01) continue;
+      if (a.pinned && c.pinned) continue;
+      // Se retira la pieza móvil; si ambas lo son, la más pequeña.
+      if (a.pinned) removedFresh.add(c.index);
+      else if (c.pinned) removedFresh.add(a.index);
+      else removedFresh.add(a.area <= c.area ? a.index : c.index);
+    }
+  }
+
+  if (!removedFresh.size) return result;
+  const placements = result.placements.filter((_, i) => !removedFresh.has(i));
+  const removedArea = result.placements.reduce((sum, p, i) => sum + (removedFresh.has(i) ? p.rot.area : 0), 0);
+  const sheets = Math.max(1, ...placements.map((p) => p.sheet + 1), ...pinned.map((p) => p.page + 1));
+  const usedArea = Math.max(0, result.usedArea - removedArea);
+  return {
+    placements,
+    sheets,
+    unplaced: result.unplaced + removedFresh.size,
+    score: result.score,
+    efficiency: result.efficiency,
+    usedArea,
+  };
 }
 
 function placeRun(
@@ -482,7 +544,9 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const usableH = Math.max(1, sheet.height - sheet.margin * 2);
   const sheetsAllowed = sheet.singlePage ? 1 : 999;
   const budgetEnd = started + QUALITY_BUDGET[options.quality];
-  const radius = Math.max(0, Math.ceil((sheet.spacing + sheet.kerf) / 2 / cell));
+  // Al menos una celda de seguridad: la rejilla no debe ser la única barrera
+  // entre dos vectores que casi se tocan.
+  const radius = Math.max(1, Math.ceil((sheet.spacing + sheet.kerf) / 2 / cell));
   const normalAngles = normalAnglesFor(options.rotation);
   const broadAngles = broadAnglesFor(options.rotation);
 
@@ -521,6 +585,8 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       angle: pin.angle,
       gx: Math.round((pin.x - sheet.margin) / cell),
       gy: Math.round((pin.y - sheet.margin) / cell),
+      x: pin.x,
+      y: pin.y,
       page: Math.max(0, pin.page),
       rot,
     });
@@ -591,6 +657,7 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       usedArea: pinnedArea,
     };
   }
+  bestRun = guardVectorOverlaps(bestRun, pinned, sheet.margin, cell);
 
   const placed: Omit<Placement, "id" | "pinned">[] = [];
   for (const p of bestRun.placements) {

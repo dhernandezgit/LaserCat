@@ -11,7 +11,7 @@ import type {
   SelectionState,
   Sheet,
 } from "../types";
-import { makePuzzleDemo, PUZZLE_SIZE } from "./puzzle";
+import { makePuzzleDemo, PUZZLE_SIZE, PUZZLE_VERSION } from "./puzzle";
 import { rotatedSize, rotatePt, rectContour } from "./geom";
 import { clipperArea, intersectContours } from "./clipper";
 import { effectiveGeometry, partOuterArea, placeEffective } from "./laser";
@@ -172,7 +172,7 @@ function completeDemoEfficiency(doc: Doc): number | null {
     placed.push({ pl, outer: g.outer, w: g.rotatedW, h: g.rotatedH, assemblyId: pl.assemblyId });
   }
   const usable = usableW * usableH;
-  if (Math.abs(area - usable) > Math.max(0.5, usable * 0.0001)) return null;
+  if (Math.abs(area - usable) > Math.max(0.5, usable * 0.002)) return null;
 
   for (let i = 0; i < placed.length; i++) {
     for (let j = i + 1; j < placed.length; j++) {
@@ -399,6 +399,7 @@ export function createPuzzleDoc(seed?: number): Doc {
     },
     settings: { ...DEFAULT_SETTINGS },
     puzzleSeed: puzzle.seed,
+    puzzleVersion: PUZZLE_VERSION,
     createdAt: now(),
     updatedAt: now(),
   };
@@ -425,7 +426,12 @@ export function createEmptyDoc(): Doc {
 export function createInitialState(): AppState {
   let stored = loadStoredDoc();
   // Los proyectos antiguos que solo tenían el demo se actualizan al puzzle.
-  if (stored && stored.parts.length && stored.puzzleSeed === undefined && stored.parts.every((p) => p.source === "demo")) {
+  if (
+    stored &&
+    stored.parts.length &&
+    stored.parts.every((p) => p.source === "demo") &&
+    (stored.puzzleSeed === undefined || stored.puzzleVersion !== PUZZLE_VERSION)
+  ) {
     stored = null;
   }
   const doc = stored || createInitialDoc();
@@ -1174,6 +1180,7 @@ export function normalizeDoc(input: any): Doc | null {
     sheet,
     settings,
     puzzleSeed: Number.isFinite(Number(input.puzzleSeed)) ? Number(input.puzzleSeed) : undefined,
+    puzzleVersion: Number.isFinite(Number(input.puzzleVersion)) ? Number(input.puzzleVersion) : undefined,
     createdAt: Number(input.createdAt) || now(),
     updatedAt: Number(input.updatedAt) || now(),
   };

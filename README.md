@@ -34,8 +34,10 @@ encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **
 ### Plancha y empaquetado
 
 - **Puzzle de madera de ejemplo** de 300 Ã— 300 mm, resuelto al **100 %** y con **0 mm de margen,
-  separaciÃ³n y kerf**. Usa entre **14 y 26 piezas** irregulares; el botÃ³n âœ¦ junto a
-  **Piezas** crea otro puzzle exacto con un nÃºmero distinto de piezas.
+  separaciÃ³n y kerf**. Usa entre **18 y 30 piezas** irregulares; el botÃ³n âœ¦ junto a
+  **Piezas** crea otro puzzle exacto con un nÃºmero distinto de piezas. Las siluetas llevan una
+  separaciÃ³n capilar de **0,01 mm** para que ningÃºn vector de corte coincida con otro; el
+  aprovechamiento sigue redondeando al **100 %**.
 - Para proyectos nuevos, **plancha de 300 Ã— 300 mm**, margen de seguridad de **5 mm** y
   separaciÃ³n de **3 mm**.
 - **Empaquetado por forma real**, no por cajas: se rasteriza cada pieza y se comprueba la colisiÃ³n
@@ -44,6 +46,8 @@ encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **
   **3 calidades** (RÃ¡pida / Normal / **Exacta**) y **compactaciÃ³n** posterior tipo DeepNest.
 - **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias** y **mÃºltiples planchas**. En **forma real** empieza por 0Â°/90Â°/180Â°/270Â° y, si algo no cabe, prueba diagonales de 45Â°; **RectÃ¡ngulos** limita a 90Â° para ir mÃ¡s rÃ¡pido.
 - **Kerf** configurable: el corte se compensa hacia el desperdicio para que la pieza final mida lo que debe.
+- **Cero solapes vectoriales**: después de empaquetar se comprueban las siluetas reales con Clipper. La rejilla de colocación lleva una celda de seguridad y cualquier conflicto residual se retira y se avisa como pieza sin colocar.
+- **Pruebas de estrés**: 120 piezas de 22 mm, 100 piezas de 28 mm y 100 piezas mixtas (con huecos) en una sola plancha de 300 × 300 mm.
 - **Fijar piezas** con el pin (o al arrastrarlas): el resto se recoloca alrededor.
 - Aprovechamiento, nÃºmero de planchas y **tiempo estimado** de corte/grabado en directo.
 
@@ -303,7 +307,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 68 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, export, store, tarjeta)
+npm test           # 76 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -340,7 +344,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 68 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, export, store, tarjeta)
+npm test           # 76 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:
@@ -413,6 +417,8 @@ Defaults: SculpFun S30 10 W, 300 Ã— 300 mm sheet, 5 mm margin, basswood 3 mm.
 theme, with Sylveon, Leafeon, Vaporeon, Umbreon and Taller available. No server, no account, no uploads.
 
 Built by **Daniel HernÃ¡ndez FerrÃ¡ndiz**. MIT licensed.
+
+
 
 
 

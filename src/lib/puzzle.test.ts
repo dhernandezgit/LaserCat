@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { Part } from "../types";
 import { clipperArea, intersectContours } from "./clipper";
-import { makePuzzleDemo, PUZZLE_SIZE } from "./puzzle";
+import { makePuzzleDemo, PUZZLE_SIZE, PUZZLE_VERSION } from "./puzzle";
 import { computeStats } from "./laser";
 import { placeEffective } from "./laser";
-import { createInitialDoc, createInitialState, createPuzzleDoc, nestDoc, normalizeDoc, reducer } from "./store";
+import { createInitialDoc, createInitialState, createPuzzleDoc, nestDoc, normalizeDoc, reducer, STORAGE_KEY } from "./store";
 
 function coverage(parts: Part[]): number {
   return parts.reduce((sum, part) => {
@@ -17,10 +17,10 @@ describe("puzzle de madera de ejemplo", () => {
   it("cubre la plancha exactamente y sin solapes", () => {
     for (let seed = 1; seed <= 24; seed++) {
       const puzzle = makePuzzleDemo(seed * 7919);
-      expect(puzzle.pieceCount).toBeGreaterThanOrEqual(14);
-      expect(puzzle.pieceCount).toBeLessThanOrEqual(26);
+      expect(puzzle.pieceCount).toBeGreaterThanOrEqual(18);
+      expect(puzzle.pieceCount).toBeLessThanOrEqual(30);
       expect(puzzle.placements).toHaveLength(puzzle.parts.length);
-      expect(coverage(puzzle.parts)).toBeCloseTo(PUZZLE_SIZE.width * PUZZLE_SIZE.height, 1);
+      expect(coverage(puzzle.parts)).toBeGreaterThan(PUZZLE_SIZE.width * PUZZLE_SIZE.height * 0.999);
 
       const placed = puzzle.parts.map((part, i) => placeEffective(part, puzzle.placements[i]));
       for (const g of placed) {
@@ -59,18 +59,19 @@ describe("puzzle de madera de ejemplo", () => {
     expect(doc.sheet.kerf).toBe(0);
     expect(doc.placements).toHaveLength(doc.parts.length);
     expect(doc.parts.every((part) => part.source === "demo")).toBe(true);
-    expect(computeStats(doc).efficiency).toBeCloseTo(1, 5);
+    expect(computeStats(doc).efficiency).toBeGreaterThan(0.9995);
+    expect(Math.round(computeStats(doc).efficiency * 100)).toBe(100);
 
     const res = nestDoc(doc);
     expect(res.nest.unplaced).toBe(0);
-    expect(res.nest.efficiency).toBeCloseTo(1, 5);
+    expect(res.nest.efficiency).toBeGreaterThan(0.9995);
     expect(res.doc.placements).toEqual(doc.placements);
 
     for (const seed of [7, 21, 99, 2024, 77777]) {
       const seeded = createPuzzleDoc(seed);
       const solved = nestDoc(seeded);
       expect(solved.nest.unplaced).toBe(0);
-      expect(solved.nest.efficiency).toBeCloseTo(1, 5);
+      expect(solved.nest.efficiency).toBeGreaterThan(0.9995);
       expect(solved.doc.placements).toEqual(seeded.placements);
     }
   });
@@ -78,10 +79,10 @@ describe("puzzle de madera de ejemplo", () => {
   it("el botón de nuevo puzzle genera otra solución exacta", () => {
     const state = createInitialState();
     const next = reducer(state, { type: "LOAD_PUZZLE", seed: 424242 });
-    expect(next.doc.parts.length).toBeGreaterThanOrEqual(14);
-    expect(next.doc.parts.length).toBeLessThanOrEqual(26);
+    expect(next.doc.parts.length).toBeGreaterThanOrEqual(18);
+    expect(next.doc.parts.length).toBeLessThanOrEqual(30);
     expect(next.doc.sheet.margin).toBe(0);
-    expect(computeStats(next.doc).efficiency).toBeCloseTo(1, 5);
+    expect(computeStats(next.doc).efficiency).toBeGreaterThan(0.9995);
     expect(next.lastNest?.unplaced).toBe(0);
   });
 
@@ -90,9 +91,21 @@ describe("puzzle de madera de ejemplo", () => {
     const loaded = normalizeDoc(JSON.parse(JSON.stringify(doc)));
     expect(loaded).not.toBeNull();
     expect(loaded!.puzzleSeed).toBe(13579);
-    expect(computeStats(loaded!).efficiency).toBeCloseTo(1, 5);
+    expect(loaded!.puzzleVersion).toBe(PUZZLE_VERSION);
+    expect(computeStats(loaded!).efficiency).toBeGreaterThan(0.9995);
     const res = nestDoc(loaded!);
     expect(res.nest.unplaced).toBe(0);
-    expect(res.nest.efficiency).toBeCloseTo(1, 5);
+    expect(res.nest.efficiency).toBeGreaterThan(0.9995);
+  });
+
+  it("actualiza un puzzle de demostración antiguo sin tocar proyectos reales", () => {
+    const old = createPuzzleDoc(98765);
+    delete old.puzzleVersion;
+    localStorage.clear();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(old));
+    const next = createInitialState();
+    expect(next.doc.puzzleVersion).toBe(PUZZLE_VERSION);
+    expect(next.doc.parts.length).toBeGreaterThanOrEqual(18);
+    localStorage.clear();
   });
 });

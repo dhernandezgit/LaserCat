@@ -177,6 +177,8 @@ export interface Doc {
   settings: DocSettings;
   /** Semilla del puzzle de madera de ejemplo, si el proyecto es ese demo. */
   puzzleSeed?: number;
+  /** Versión del generador del puzzle, para actualizar demos antiguos. */
+  puzzleVersion?: number;
   createdAt: number;
   updatedAt: number;
 }

@@ -81,7 +81,7 @@ export function Board({
         // Las cajas pueden solaparse aunque las siluetas encajen (p. ej. un
         // puzzle). Solo marcamos las piezas cuya superficie real se cruza.
         if (ox > 0.01 && oy > 0.01) {
-          if (clipperArea(intersectContours(a.outer, b.outer)) > 0.05) {
+          if (clipperArea(intersectContours(a.outer, b.outer)) > 0.01) {
             set.add(a.id);
             set.add(b.id);
           }

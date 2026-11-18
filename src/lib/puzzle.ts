@@ -7,15 +7,24 @@
  */
 
 import type { Contour, Part, Placement } from "../types";
-import { cleanContours, normalizeOrientation, unionContours } from "./clipper";
+import { cleanContours, normalizeOrientation, offsetContours, unionContours } from "./clipper";
 import { uid } from "./demo";
 import { contoursBounds, rectContour, translateContours } from "./geom";
 
 const COLS = 10;
 const ROWS = 10;
 const CELL = 30;
-const PIECES_MIN = 14;
-const PIECES_MAX = 26;
+const PIECES_MIN = 18;
+const PIECES_MAX = 30;
+
+export const PUZZLE_VERSION = 2;
+
+/**
+ * Separación capilar entre piezas. Evita que dos piezas compartan exactamente
+ * el mismo segmento de corte (lo que algunos validadores ven como solape de
+ * vectores) sin que se aprecie a simple vista.
+ */
+const PUZZLE_INSET_MM = 0.005;
 
 const COLORS = ["#8a5a32", "#a87343", "#74482a", "#b98a58", "#90653c", "#6d4526", "#c09a6b"];
 
@@ -178,28 +187,32 @@ export function makePuzzleDemo(seed = randomSeed()): PuzzleDemo {
   const placements: Placement[] = [];
   tiling.cells.forEach((cells, index) => {
     const geo = pieceContours(cells);
+    const inset = offsetContours(geo.contours, -PUZZLE_INSET_MM, "miter", 0.005);
+    const shrunk = inset.length ? inset : geo.contours;
+    const sb = contoursBounds(shrunk);
+    const local = translateContours(shrunk, -sb.x, -sb.y);
     const id = uid("puzzle");
     parts.push({
       id,
       name: `Pieza ${String(index + 1).padStart(2, "0")}`,
       kind: "vector",
-      contours: geo.contours,
-      width: geo.width,
-      height: geo.height,
+      contours: local,
+      width: sb.w,
+      height: sb.h,
       operation: "cut",
       offsetMm: 0,
       separateBorder: false,
       copies: 1,
       source: "demo",
       color: COLORS[index % COLORS.length],
-      notes: `${cells.length} celdas · encaje exacto`,
+      notes: `${cells.length} celdas · encaje con separación capilar`,
     });
     placements.push({
       id: uid("pl"),
       partId: id,
       page: 0,
-      x: geo.x,
-      y: geo.y,
+      x: geo.x + (geo.width - sb.w) / 2,
+      y: geo.y + (geo.height - sb.h) / 2,
       angle: 0,
       mirror: false,
       pinned: false,
