@@ -150,7 +150,7 @@ export function ViewerShell({
 
         {missing > 0 && (
           <div className="unplaced-banner" role="alert">
-            <span>⚠ {missing} pieza{missing === 1 ? "" : "s"} sin colocar. Prueba Exacta, baja la separación o añade otra plancha.</span>
+            <span>⚠ {missing} pieza{missing === 1 ? "" : "s"} sin colocar. Pulsa Optimizar para colocarlas.</span>
             <button type="button" className="cc-btn" onClick={onOptimize}>Recolocar</button>
           </div>
         )}

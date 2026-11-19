@@ -17,8 +17,8 @@ previsualiza el resultado en distintas maderas y exporta SVG en milÃ­metros li
 Hecho para diodos como la **SculpFun S30 (10 W)**, con **tilo de 3 mm** como material de partida.
 Funciona con cualquier lÃ¡ser y cualquier plancha. La interfaz copia la disposiciÃ³n y el flujo de
 **CryCat** (tres columnas, tarjetas, barra inferior y temas pastel), adaptada al corte y grabado lÃ¡ser.
-Arranca con el tema **Eevee** y con un **puzzle de madera ya resuelto**: piezas irregulares que
-encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **0 mm de margen, separaciÃ³n y kerf**.
+Arranca con el tema **Eevee** y con un **puzzle de madera sin montar**: las piezas irregulares
+están en la lista y la plancha está vacía hasta que pulsas **Optimizar**.
 
 - ðŸŒ **App:** https://dhernandezgit.github.io/LaserCat/
 - ðŸ“¦ **Repo:** https://github.com/dhernandezgit/LaserCat
@@ -33,11 +33,11 @@ encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **
 
 ### Plancha y empaquetado
 
-- **Puzzle de madera de ejemplo** de 300 Ã— 300 mm, resuelto al **100 %** y con **0 mm de margen,
-  separaciÃ³n y kerf**. Usa entre **18 y 30 piezas** irregulares; el botÃ³n âœ¦ junto a
-  **Piezas** crea otro puzzle exacto con un nÃºmero distinto de piezas. Las siluetas llevan una
-  separaciÃ³n capilar de **0,01 mm** para que ningÃºn vector de corte coincida con otro; el
-  aprovechamiento sigue redondeando al **100 %**.
+- **Puzzle de madera de ejemplo** de 300 Ã— 300 mm. Se abre **sin montar**: las piezas están en la
+  lista y la plancha vacía hasta que pulsas **Optimizar**, que aplica la solución exacta. Usa entre
+  **18 y 30 piezas** irregulares; el botón ✦ junto a **Piezas** crea otro puzzle sin montar. Las
+  siluetas llevan una separación capilar de **0,01 mm** para que ningún vector de corte coincida
+  con otro; el aprovechamiento sigue redondeando al **100 %**.
 - Para proyectos nuevos, **plancha de 300 Ã— 300 mm**, margen de seguridad de **5 mm** y
   separaciÃ³n de **3 mm**.
 - **Empaquetado por forma real**, no por cajas: se rasteriza cada pieza y se comprueba la colisiÃ³n

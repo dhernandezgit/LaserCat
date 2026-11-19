@@ -129,6 +129,7 @@ describe("store", () => {
   it("starts with a demo", () => {
     const state = createInitialState();
     expect(state.doc.parts.length).toBeGreaterThan(0);
-    expect(state.doc.placements.length).toBeGreaterThan(0);
+    expect(state.doc.placements).toHaveLength(0);
+    expect(state.doc.puzzleSolution?.length).toBe(state.doc.parts.length);
   });
 });

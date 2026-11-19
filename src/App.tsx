@@ -355,13 +355,16 @@ export default function App() {
     window.addEventListener("mouseup", onUp);
   };
 
+  const unsolvedPuzzle = doc.puzzleSeed !== undefined && doc.placements.length === 0;
   const message = busy
     ? "Optimizando…"
     : !doc.parts.length
       ? "Listo para empezar"
-      : missing > 0
-        ? `No caben todas las piezas: ${missing} sin colocar`
-        : `Listo · ${doc.parts.length} pieza${doc.parts.length === 1 ? "" : "s"} en ${pages} plancha${pages === 1 ? "" : "s"}`;
+      : unsolvedPuzzle
+        ? "Puzzle sin montar · pulsa Optimizar"
+        : missing > 0
+          ? `No caben todas las piezas: ${missing} sin colocar`
+          : `Listo · ${doc.parts.length} pieza${doc.parts.length === 1 ? "" : "s"} en ${pages} plancha${pages === 1 ? "" : "s"}`;
 
   return (
     <div className="app">

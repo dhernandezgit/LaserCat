@@ -52,47 +52,71 @@ describe("puzzle de madera de ejemplo", () => {
     expect(irregular).toBeGreaterThan(0);
   });
 
-  it("arranca resuelto al 100 % y Optimizar conserva la solución", () => {
+  it("arranca sin montar y Optimizar lo resuelve al 100 %", () => {
     const doc = createInitialDoc();
     expect(doc.sheet.margin).toBe(0);
     expect(doc.sheet.spacing).toBe(0);
     expect(doc.sheet.kerf).toBe(0);
-    expect(doc.placements).toHaveLength(doc.parts.length);
+    expect(doc.placements).toHaveLength(0);
+    expect(doc.puzzleSolution).toHaveLength(doc.parts.length);
     expect(doc.parts.every((part) => part.source === "demo")).toBe(true);
-    expect(computeStats(doc).efficiency).toBeGreaterThan(0.9995);
-    expect(Math.round(computeStats(doc).efficiency * 100)).toBe(100);
+    expect(computeStats(doc).efficiency).toBe(0);
 
     const res = nestDoc(doc);
     expect(res.nest.unplaced).toBe(0);
     expect(res.nest.efficiency).toBeGreaterThan(0.9995);
-    expect(res.doc.placements).toEqual(doc.placements);
+    expect(res.doc.placements).toHaveLength(doc.parts.length);
+    expect(computeStats(res.doc).efficiency).toBeGreaterThan(0.9995);
+    const first = res.doc.placements.map((p) => [p.partId, p.x, p.y, p.angle]);
+
+    // Da igual dónde estén las piezas: Optimizar vuelve a la solución exacta.
+    const scrambled = {
+      ...res.doc,
+      placements: res.doc.placements.map((p, i) => ({
+        ...p,
+        x: (i * 17) % 250,
+        y: (i * 29) % 250,
+        angle: i % 2 ? 45 : 0,
+      })),
+    };
+    const again = nestDoc(scrambled);
+    expect(again.nest.unplaced).toBe(0);
+    expect(again.doc.placements.map((p) => [p.partId, p.x, p.y, p.angle])).toEqual(first);
 
     for (const seed of [7, 21, 99, 2024, 77777]) {
       const seeded = createPuzzleDoc(seed);
+      expect(seeded.placements).toHaveLength(0);
       const solved = nestDoc(seeded);
       expect(solved.nest.unplaced).toBe(0);
       expect(solved.nest.efficiency).toBeGreaterThan(0.9995);
-      expect(solved.doc.placements).toEqual(seeded.placements);
+      expect(solved.doc.placements).toHaveLength(seeded.parts.length);
     }
   });
 
-  it("el botón de nuevo puzzle genera otra solución exacta", () => {
+  it("el botón de nuevo puzzle lo deja sin montar y Optimizar lo resuelve", () => {
     const state = createInitialState();
     const next = reducer(state, { type: "LOAD_PUZZLE", seed: 424242 });
     expect(next.doc.parts.length).toBeGreaterThanOrEqual(18);
     expect(next.doc.parts.length).toBeLessThanOrEqual(30);
     expect(next.doc.sheet.margin).toBe(0);
-    expect(computeStats(next.doc).efficiency).toBeGreaterThan(0.9995);
-    expect(next.lastNest?.unplaced).toBe(0);
+    expect(next.doc.placements).toHaveLength(0);
+    expect(computeStats(next.doc).efficiency).toBe(0);
+    expect(next.lastNest?.unplaced).toBe(next.doc.parts.length);
+
+    const solved = reducer(next, { type: "NEST" });
+    expect(solved.lastNest?.unplaced).toBe(0);
+    expect(solved.doc.placements).toHaveLength(next.doc.parts.length);
+    expect(computeStats(solved.doc).efficiency).toBeGreaterThan(0.9995);
   });
 
-  it("sigue al 100 % después de guardar y volver a cargar", () => {
+  it("sigue resoluble después de guardar y volver a cargar", () => {
     const doc = createPuzzleDoc(13579);
     const loaded = normalizeDoc(JSON.parse(JSON.stringify(doc)));
     expect(loaded).not.toBeNull();
     expect(loaded!.puzzleSeed).toBe(13579);
     expect(loaded!.puzzleVersion).toBe(PUZZLE_VERSION);
-    expect(computeStats(loaded!).efficiency).toBeGreaterThan(0.9995);
+    expect(loaded!.placements).toHaveLength(0);
+    expect(loaded!.puzzleSolution).toHaveLength(loaded!.parts.length);
     const res = nestDoc(loaded!);
     expect(res.nest.unplaced).toBe(0);
     expect(res.nest.efficiency).toBeGreaterThan(0.9995);

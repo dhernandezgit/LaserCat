@@ -167,6 +167,16 @@ export interface DocSettings {
   previewPasses: number;
 }
 
+/** Posición conocida de una pieza del puzzle de demostración. */
+export interface PuzzleSolutionEntry {
+  partId: string;
+  x: number;
+  y: number;
+  angle: number;
+  width: number;
+  height: number;
+}
+
 export interface Doc {
   version: 1;
   name: string;
@@ -179,6 +189,8 @@ export interface Doc {
   puzzleSeed?: number;
   /** Versión del generador del puzzle, para actualizar demos antiguos. */
   puzzleVersion?: number;
+  /** Solución exacta guardada; permite resolver el demo desde cualquier posición. */
+  puzzleSolution?: PuzzleSolutionEntry[];
   createdAt: number;
   updatedAt: number;
 }

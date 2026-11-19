@@ -8,6 +8,7 @@ import type {
   NestRequestPart,
   Part,
   Placement,
+  PuzzleSolutionEntry,
   SelectionState,
   Sheet,
 } from "../types";
@@ -189,12 +190,66 @@ function completeDemoEfficiency(doc: Doc): number | null {
   return Math.min(1, area / usable);
 }
 
+/** Aplica la solución exacta guardada del puzzle, sin importar dónde estén las piezas. */
+function puzzleSolutionPlacements(doc: Doc): Placement[] | null {
+  if (!doc.puzzleSeed || !doc.puzzleSolution?.length) return null;
+  if (doc.parts.length !== doc.puzzleSolution.length) return null;
+  if (doc.parts.some((p) => p.copies !== 1) || (doc.groups && doc.groups.length)) return null;
+  if (Math.abs(doc.sheet.width - PUZZLE_SIZE.width) > 0.01 || Math.abs(doc.sheet.height - PUZZLE_SIZE.height) > 0.01) {
+    return null;
+  }
+  const byId = new Map(doc.parts.map((p) => [p.id, p]));
+  const out: Placement[] = [];
+  const { margin, width, height } = doc.sheet;
+  for (const entry of doc.puzzleSolution) {
+    const part = byId.get(entry.partId);
+    if (!part) return null;
+    const g = effectiveGeometry(part);
+    if (Math.abs(g.width - entry.width) > 0.15 || Math.abs(g.height - entry.height) > 0.15) return null;
+    const size = rotatedSize({ width: g.width, height: g.height }, entry.angle);
+    if (
+      entry.x < margin - 0.01 ||
+      entry.y < margin - 0.01 ||
+      entry.x + size.w > width - margin + 0.01 ||
+      entry.y + size.h > height - margin + 0.01
+    ) {
+      return null;
+    }
+    out.push({
+      id: nextId("pl"),
+      partId: entry.partId,
+      page: 0,
+      x: entry.x,
+      y: entry.y,
+      angle: entry.angle,
+      mirror: false,
+      pinned: false,
+    });
+  }
+  return out;
+}
+
 /** Recoloca todas las piezas no fijadas y devuelve el documento y el aviso. */
 export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
   if (!doc.parts.length) {
     return {
       doc: { ...doc, placements: [], updatedAt: now() },
       nest: { at: now(), unplaced: 0, efficiency: 0, pages: 1, elapsedMs: 0 },
+    };
+  }
+  const puzzlePlaced = puzzleSolutionPlacements(doc);
+  if (puzzlePlaced) {
+    const usable = Math.max(1, (doc.sheet.width - doc.sheet.margin * 2) * (doc.sheet.height - doc.sheet.margin * 2));
+    const used = doc.parts.reduce((sum, part) => sum + partOuterArea(part), 0);
+    return {
+      doc: { ...doc, placements: puzzlePlaced, updatedAt: now() },
+      nest: {
+        at: now(),
+        unplaced: 0,
+        efficiency: Math.min(1, used / Math.max(1e-6, usable)),
+        pages: 1,
+        elapsedMs: 0,
+      },
     };
   }
   const solved = completeDemoEfficiency(doc);
@@ -380,14 +435,20 @@ function autoNestOrKeep(state: AppState, doc: Doc, key: string): AppState {
   return withDoc(state, doc, key);
 }
 
-/** Puzzle de ejemplo, ya resuelto y con márgenes cero. */
+/** Puzzle de ejemplo, sin montar y con márgenes cero. */
 export function createPuzzleDoc(seed?: number): Doc {
   const puzzle = makePuzzleDemo(seed);
   return {
     version: 1,
     name: `Puzzle de madera · ${puzzle.pieceCount} piezas`,
     parts: puzzle.parts,
-    placements: puzzle.placements,
+    // El demo se abre sin montar: al pulsar Optimizar se aplica la solución
+    // conocida, sea cual sea la posición en la que estén las piezas.
+    placements: [],
+    puzzleSolution: puzzle.placements.map((pl) => {
+      const part = puzzle.parts.find((p) => p.id === pl.partId)!;
+      return { partId: pl.partId, x: pl.x, y: pl.y, angle: pl.angle, width: part.width, height: part.height };
+    }),
     groups: [],
     sheet: {
       ...DEFAULT_SHEET,
@@ -453,8 +514,8 @@ export function createInitialState(): AppState {
       ? null
       : {
           at: now(),
-          unplaced: 0,
-          efficiency: 1,
+          unplaced: Math.max(0, doc.parts.length - doc.placements.length),
+          efficiency: doc.placements.length ? 1 : 0,
           pages: Math.max(1, ...doc.placements.map((p) => p.page + 1)),
           elapsedMs: 0,
         },
@@ -529,6 +590,7 @@ export function reducer(state: AppState, action: Action): AppState {
       let doc: Doc = {
         ...state.doc,
         puzzleSeed: addingReal ? undefined : state.doc.puzzleSeed,
+        puzzleSolution: addingReal ? undefined : state.doc.puzzleSolution,
         parts: [...baseParts, ...parts],
         placements: basePlacements,
         groups: [...baseGroups, ...incomingGroups.map((g) => ({
@@ -541,7 +603,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return autoNestOrKeep(state, doc, "add-parts");
     }
     case "ADD_SHAPE": {
-      const doc = { ...state.doc, puzzleSeed: undefined, parts: [...state.doc.parts, action.shape] };
+      const doc = { ...state.doc, puzzleSeed: undefined, puzzleSolution: undefined, parts: [...state.doc.parts, action.shape] };
       return autoNestOrKeep(state, doc, "add-shape");
     }
     case "SET_ALL_OFFSET": {
@@ -938,6 +1000,7 @@ export function reducer(state: AppState, action: Action): AppState {
         placements: [],
         groups: [],
         puzzleSeed: undefined,
+        puzzleSolution: undefined,
         name: state.doc.name,
         updatedAt: now(),
       };
@@ -977,12 +1040,12 @@ export function reducer(state: AppState, action: Action): AppState {
         future: [],
         lastKey: "",
         lastAt: 0,
-        lastNest: { at: now(), unplaced: 0, efficiency: 1, pages: 1, elapsedMs: 0 },
+        lastNest: { at: now(), unplaced: doc.parts.length, efficiency: 0, pages: 1, elapsedMs: 0 },
         selection: { partIds: [], placementIds: [] },
         ui: {
           ...state.ui,
           page: 0,
-          toast: { text: `Puzzle nuevo: ${doc.parts.length} piezas · 100 %`, kind: "ok" },
+          toast: { text: `Puzzle nuevo: ${doc.parts.length} piezas · pulsa Optimizar`, kind: "ok" },
         },
       };
     }
@@ -1150,6 +1213,19 @@ export function normalizeDoc(input: any): Doc | null {
     machineId: String(rs.machineId || DEFAULT_SETTINGS.machineId),
     materialId: String(rs.materialId || DEFAULT_SETTINGS.materialId),
   };
+  const puzzleSolution: PuzzleSolutionEntry[] | undefined = Array.isArray(input.puzzleSolution)
+    ? input.puzzleSolution
+        .slice(0, 100)
+        .filter((e: any) => e && ids.has(String(e.partId)) && Number.isFinite(Number(e.x)) && Number.isFinite(Number(e.y)))
+        .map((e: any) => ({
+          partId: String(e.partId),
+          x: Number(e.x),
+          y: Number(e.y),
+          angle: Number.isFinite(Number(e.angle)) ? Number(e.angle) : 0,
+          width: Number.isFinite(Number(e.width)) ? Number(e.width) : 0,
+          height: Number.isFinite(Number(e.height)) ? Number(e.height) : 0,
+        }))
+    : undefined;
   const rawGroups = Array.isArray(input.groups) ? input.groups.slice(0, 200) : [];
   const usedParts = new Set<string>();
   const groups: Assembly[] = [];
@@ -1193,6 +1269,7 @@ export function normalizeDoc(input: any): Doc | null {
     settings,
     puzzleSeed: Number.isFinite(Number(input.puzzleSeed)) ? Number(input.puzzleSeed) : undefined,
     puzzleVersion: Number.isFinite(Number(input.puzzleVersion)) ? Number(input.puzzleVersion) : undefined,
+    puzzleSolution,
     createdAt: Number(input.createdAt) || now(),
     updatedAt: Number(input.updatedAt) || now(),
   };
