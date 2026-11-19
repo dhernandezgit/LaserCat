@@ -144,8 +144,9 @@ están en la lista y la plancha está vacía hasta que pulsas **Optimizar**.
   - Negro `#000000` â†’ **CORTE** (LÃ­nea)
   - Magenta `#FF00FF` â†’ **BORDE** (LÃ­nea)
   - Rojo `#FF0000` â†’ **MARCAS** (referencia; se puede ignorar)
-- Grabado antes que corte en el orden del documento.
-- **Kerf**, **puentes de sujeciÃ³n**, marcas de esquina y **orden de recorridos** por cercanÃ­a.
+- **Dibujos debajo y líneas encima**: grabado e imágenes pintan antes que marcado, borde y corte; el recuadro exterior va al final.
+- **Grupos originales conservados** en el SVG: cada figura mantiene su envoltorio de grupo dentro de cada capa; lo no agrupado queda suelto.
+- **Kerf**, **puentes de sujeción**, **recuadro exterior opcional activado por defecto** y **orden de recorridos** por cercanía.
 - ImÃ¡genes de grabado **incrustadas** en el SVG y tambiÃ©n como PNG sueltos en el ZIP.
 - ExportaciÃ³n **por figura**: desde su tarjeta, un ZIP compacto con el SVG de esa figura, sus
   imÃ¡genes, el CSV de capas y el LEEME.
@@ -310,7 +311,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 79 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 81 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -347,7 +348,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 79 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 81 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:
@@ -420,6 +421,7 @@ Defaults: SculpFun S30 10 W, 300 Ã— 300 mm sheet, 5 mm margin, basswood 3 mm.
 theme, with Sylveon, Leafeon, Vaporeon, Umbreon and Taller available. No server, no account, no uploads.
 
 Built by **Daniel HernÃ¡ndez FerrÃ¡ndiz**. MIT licensed.
+
 
 
 

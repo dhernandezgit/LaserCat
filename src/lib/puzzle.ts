@@ -17,7 +17,7 @@ const CELL = 30;
 const PIECES_MIN = 18;
 const PIECES_MAX = 30;
 
-export const PUZZLE_VERSION = 3;
+export const PUZZLE_VERSION = 4;
 
 /**
  * Separación capilar entre piezas. Evita que dos piezas compartan exactamente

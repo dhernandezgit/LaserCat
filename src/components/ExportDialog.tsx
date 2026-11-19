@@ -186,7 +186,7 @@ export function ExportDialog({
             </div>
           )}
           <Toggle checked={doc.settings.exportOrder} onChange={(v) => setSetting({ exportOrder: v })} label="Ordenar recorridos" hint="Ordena por cercanía para reducir viajes." />
-          <Toggle checked={doc.settings.exportFrame} onChange={(v) => setSetting({ exportFrame: v })} label="Marcas de esquina" hint="Capa roja MARCAS; puedes desactivarla en LightBurn." />
+          <Toggle checked={doc.settings.exportFrame} onChange={(v) => setSetting({ exportFrame: v })} label="Recuadro exterior" hint="Añade el marco completo de la plancha en la capa roja MARCAS; puedes desactivarlo." />
           <Toggle checked={doc.settings.exportNotes} onChange={(v) => setSetting({ exportNotes: v })} label="Notas en el SVG" hint="Material y ajustes dentro del archivo." />
 
           <div className="divider" />

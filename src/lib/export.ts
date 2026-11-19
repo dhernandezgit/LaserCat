@@ -31,7 +31,7 @@ export const DEFAULT_EXPORT: SvgExportOptions = {
   bridges: false,
   bridgeCount: 4,
   bridgeWidth: 2.5,
-  frame: false,
+  frame: true,
   order: true,
   notes: true,
 };
@@ -156,6 +156,8 @@ interface Item {
   d: string;
   fill: boolean;
   image?: string;
+  groupId?: string;
+  groupName?: string;
 }
 
 function sortNearest(items: Item[], start: Pt): Item[] {
@@ -212,6 +214,17 @@ export function buildSheetSvg(doc: Doc, page: number, options: SvgExportOptions 
   };
   const sheetW = doc.sheet.width;
   const sheetH = doc.sheet.height;
+  const originalGroups = doc.groups || [];
+  const groupOfPart = new Map<string, { id: string; name: string }>();
+  for (const group of originalGroups) {
+    for (const member of group.members) groupOfPart.set(member.partId, { id: group.id, name: group.name });
+  }
+  const groupData = (pl: Placement, part: Part): Pick<Item, "groupId" | "groupName"> => {
+    const gid = pl.assemblyId || part.assemblyId || groupOfPart.get(part.id)?.id || part.groupId;
+    if (!gid) return {};
+    const known = originalGroups.find((g) => g.id === gid);
+    return { groupId: gid, groupName: known?.name || gid };
+  };
 
   for (const pl of placements) {
     const part = partsById.get(pl.partId);
@@ -224,7 +237,7 @@ export function buildSheetSvg(doc: Doc, page: number, options: SvgExportOptions 
     };
     const addCut = (contours: Contour[], layer: "cut" | "border") => {
       const d = prepareCut(contours, options, doc.sheet.kerf);
-      if (d) layers[layer].push({ id: pl.id, name: part.name, center, d, fill: false });
+      if (d) layers[layer].push({ id: pl.id, name: part.name, center, d, fill: false, ...groupData(pl, part) });
     };
     const addEngrave = (contours: Contour[]) => {
       if (!contours.length) return;
@@ -234,6 +247,7 @@ export function buildSheetSvg(doc: Doc, page: number, options: SvgExportOptions 
         center,
         d: closedPath(contours),
         fill: true,
+        ...groupData(pl, part),
       });
     };
 
@@ -241,7 +255,7 @@ export function buildSheetSvg(doc: Doc, page: number, options: SvgExportOptions 
       if (part.kind === "raster") {
         const tag = rasterImageTag(part, pl);
         if (tag) {
-          layers.engrave.push({ id: pl.id, name: part.name, center, d: "", fill: false, image: tag });
+          layers.engrave.push({ id: pl.id, name: part.name, center, d: "", fill: false, image: tag, ...groupData(pl, part) });
         }
       } else {
         addEngrave(placed.base);
@@ -290,37 +304,44 @@ export function buildSheetSvg(doc: Doc, page: number, options: SvgExportOptions 
     if (!items.length) continue;
     const meta = layerMeta[key];
     body += `<g id="layer-${key}" data-layer="${key}" inkscape:groupmode="layer" inkscape:label="${meta.desc}" fill="${meta.color}" stroke="none">\n`;
+    const grouped = new Map<string, { name: string; items: Item[] }>();
+    const loose: Item[] = [];
     for (const item of items) {
-      body += `<g id="p-${esc(item.id)}-${key}" data-name="${esc(item.name)}">\n`;
-      if (item.image) body += item.image + "\n";
+      if (item.groupId) {
+        const entry = grouped.get(item.groupId) || { name: item.groupName || item.groupId, items: [] };
+        entry.items.push(item);
+        grouped.set(item.groupId, entry);
+      } else {
+        loose.push(item);
+      }
+    }
+    const itemSvg = (item: Item) => {
+      let html = `<g id="p-${esc(item.id)}-${key}" data-name="${esc(item.name)}">\n`;
+      if (item.image) html += item.image + "\n";
       if (item.d) {
         if (meta.fill) {
-          body += `<path d="${item.d}" fill="${meta.color}" fill-rule="evenodd" stroke="${meta.color}" stroke-width="0.05"/>\n`;
+          html += `<path d="${item.d}" fill="${meta.color}" fill-rule="evenodd" stroke="${meta.color}" stroke-width="0.05"/>\n`;
         } else {
-          body += `<path d="${item.d}" fill="none" stroke="${meta.color}" stroke-width="0.1" stroke-linejoin="round" stroke-linecap="round"/>\n`;
+          html += `<path d="${item.d}" fill="none" stroke="${meta.color}" stroke-width="0.1" stroke-linejoin="round" stroke-linecap="round"/>\n`;
         }
       }
+      html += `</g>\n`;
+      return html;
+    };
+    for (const [gid, group] of grouped) {
+      body += `<g id="group-${esc(gid)}-${key}" data-group-id="${esc(gid)}" data-group-name="${esc(group.name)}">\n`;
+      for (const item of group.items) body += itemSvg(item);
       body += `</g>\n`;
     }
+    for (const item of loose) body += itemSvg(item);
     body += `</g>\n`;
   }
 
   if (options.frame) {
-    const m = Math.max(1, Math.min(doc.sheet.margin, Math.min(sheetW, sheetH) / 4));
-    const len = Math.min(8, m * 1.6);
-    const lw = 0.15;
-    let d = "";
-    // esquinas en L
-    const corners = [
-      [m, m, 1, 1],
-      [sheetW - m, m, -1, 1],
-      [m, sheetH - m, 1, -1],
-      [sheetW - m, sheetH - m, -1, -1],
-    ];
-    for (const [x, y, sx, sy] of corners) {
-      d += `M${fmt(x)} ${fmt(y)}L${fmt(x + sx * len)} ${fmt(y)}M${fmt(x)} ${fmt(y)}L${fmt(x)} ${fmt(y + sy * len)}`;
-    }
-    body += `<g id="layer-marks" data-layer="marks" inkscape:label="MARCAS" fill="none" stroke="${LAYER_COLORS.marks}" stroke-width="${lw}" stroke-linecap="round">\n`;
+    // Recuadro exterior completo: contiene toda la plancha y queda por encima
+    // de dibujos y líneas. Es una capa de referencia (rojo), no un corte.
+    const d = `M0 0H${fmt(sheetW)}V${fmt(sheetH)}H0Z`;
+    body += `<g id="layer-marks" data-layer="marks" inkscape:label="MARCAS" fill="none" stroke="${LAYER_COLORS.marks}" stroke-width="0.15" stroke-linecap="round">\n`;
     body += `<path d="${d}"/>\n</g>\n`;
   }
 

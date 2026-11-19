@@ -120,10 +120,43 @@ describe("buildSheetSvg", () => {
     expect(cutGroup.split("</g>")[0]).not.toContain("Z");
   });
 
-  it("adds corner marks when requested", () => {
+  it("adds the optional outer frame", () => {
     const svg = buildSheetSvg(doc([part()]), 0, { kerf: true, bridges: false, bridgeCount: 4, bridgeWidth: 2.5, frame: true, order: true, notes: true });
     expect(svg).toContain('id="layer-marks"');
     expect(svg).toContain("#FF0000");
+  });
+
+  it("deja dibujos debajo y líneas encima, con el recuadro exterior al final", () => {
+    const cut = part({ id: "c2", name: "Corte" });
+    const eng = part({ id: "e2", name: "Grabado", operation: "engrave" });
+    const svg = buildSheetSvg(doc([cut, eng]), 0);
+    const engAt = svg.indexOf('id="layer-engrave"');
+    const cutAt = svg.indexOf('id="layer-cut"');
+    const frameAt = svg.indexOf('id="layer-marks"');
+    expect(engAt).toBeGreaterThanOrEqual(0);
+    expect(cutAt).toBeGreaterThan(engAt);
+    expect(frameAt).toBeGreaterThan(cutAt);
+    expect(svg).toContain("M0 0H300V300H0Z");
+  });
+
+  it("mantiene los grupos originales y no mete todo en un único grupo", () => {
+    const a = part({ id: "a", name: "A", assemblyId: "asm1" });
+    const b = part({ id: "b", name: "B", assemblyId: "asm1" });
+    const c = part({ id: "c", name: "C" });
+    const d = doc([a, b, c], {
+      groups: [{ id: "asm1", name: "Figura A", copies: 1, members: [{ partId: "a", dx: 0, dy: 0 }, { partId: "b", dx: 10, dy: 0 }] }],
+      placements: [
+        { id: "pl1", partId: "a", page: 0, x: 20, y: 20, angle: 0, mirror: false, pinned: false, assemblyId: "asm1" },
+        { id: "pl2", partId: "b", page: 0, x: 30, y: 20, angle: 0, mirror: false, pinned: false, assemblyId: "asm1" },
+        { id: "pl3", partId: "c", page: 0, x: 70, y: 20, angle: 0, mirror: false, pinned: false },
+      ],
+    });
+    const svg = buildSheetSvg(d, 0, { kerf: true, bridges: false, bridgeCount: 4, bridgeWidth: 2.5, frame: true, order: true, notes: true });
+    expect(svg).toContain('data-group-id="asm1"');
+    expect(svg).toContain('data-group-name="Figura A"');
+    expect(svg).toContain('id="group-asm1-cut"');
+    expect((svg.match(/data-group-id="asm1"/g) || []).length).toBe(1);
+    expect(svg).toContain('id="p-pl3-cut"');
   });
 
   it("embeds raster images as data URLs", () => {

@@ -47,7 +47,7 @@ export const DEFAULT_SETTINGS: DocSettings = {
   bridgeCount: 4,
   bridgeWidth: 2.5,
   exportKerf: true,
-  exportFrame: false,
+  exportFrame: true,
   exportOrder: true,
   exportNotes: true,
   engraveOutput: "raster",

@@ -576,7 +576,7 @@ export function SettingsShell({
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <ToggleLine checked={settings.exportKerf} onChange={(v) => setSettings({ exportKerf: v })} label="Compensar kerf" />
             <ToggleLine checked={settings.exportBridges} onChange={(v) => setSettings({ exportBridges: v })} label="Puentes de sujeción" />
-            <ToggleLine checked={settings.exportFrame} onChange={(v) => setSettings({ exportFrame: v })} label="Marcas de esquina" />
+            <ToggleLine checked={settings.exportFrame} onChange={(v) => setSettings({ exportFrame: v })} label="Recuadro exterior" />
             <ToggleLine checked={settings.exportOrder} onChange={(v) => setSettings({ exportOrder: v })} label="Ordenar recorridos" />
             <ToggleLine checked={settings.exportNotes} onChange={(v) => setSettings({ exportNotes: v })} label="Notas y material en el SVG" />
           </div>
