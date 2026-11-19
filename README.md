@@ -48,7 +48,9 @@ encajan entre sÃ­ y llenan la plancha de 300 Ã— 300 mm al **100 %**, con **
 - **Kerf** configurable: el corte se compensa hacia el desperdicio para que la pieza final mida lo que debe.
 - **Cero solapes vectoriales**: después de empaquetar se comprueban las siluetas reales con Clipper. La rejilla de colocación lleva una celda de seguridad y cualquier conflicto residual se retira y se avisa como pieza sin colocar.
 - **Relleno de huecos**: después de colocar las piezas grandes se detectan los huecos cerrados (anillos, U, recovecos), se prueban primero ahí las piezas pequeñas y se reintentan las que no cabían tras compactar.
-- **Pruebas de estrés**: 120 piezas de 22 mm, 100 piezas de 28 mm y 100 piezas mixtas (con huecos) en una sola plancha de 300 × 300 mm.
+- **Red de seguridad MaxRects por cajas**: además del empaquetado por silueta, se calcula una colocación exacta de cajas. Si coloca más piezas o menos hojas, se usa esa; así cuatro piezas de 150 mm llenan una plancha de 300 × 300 sin que la rejilla invente separaciones.
+- **Pruebas de estrés**: 120 piezas de 22 mm, 100 piezas de 28 mm, 100 piezas de 30 mm que llenan la plancha exactamente y 100 piezas mixtas (con huecos) en una sola plancha de 300 × 300 mm.
+- **Copias editables**: además de − / +, el número de copias se escribe a mano. Lo mismo ocurre con tamaño, borde, margen, separación, kerf y demás campos numéricos.
 - **Fijar piezas** con el pin (o al arrastrarlas): el resto se recoloca alrededor.
 - Aprovechamiento, nÃºmero de planchas y **tiempo estimado** de corte/grabado en directo.
 
@@ -308,7 +310,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 77 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 79 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -345,7 +347,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 77 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 79 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:

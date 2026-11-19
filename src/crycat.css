@@ -297,6 +297,28 @@ input[type="range"] { accent-color: var(--accent2); }
   font-size: 19px;
   font-variant-numeric: tabular-nums;
 }
+.copies-row .copies-input {
+  width: 52px;
+  min-width: 52px;
+  height: 27px;
+  padding: 2px 4px;
+  font-size: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel2);
+  font-variant-numeric: tabular-nums;
+}
+.copies-row .copies-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.bulk-row .n {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent3);
+  font-size: 12px;
+}
 .copies-row .step {
   width: 23px;
   height: 23px;

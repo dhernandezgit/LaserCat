@@ -59,6 +59,183 @@ interface Instance {
   copies: number;
 }
 
+interface BoxRot {
+  angle: number;
+  w: number;
+  h: number;
+}
+
+interface BoxPlacement {
+  partIndex: number;
+  page: number;
+  x: number;
+  y: number;
+  angle: number;
+  area: number;
+}
+
+interface BoxResult {
+  placements: BoxPlacement[];
+  pages: number;
+  unplaced: number;
+  usedArea: number;
+  bboxArea: number;
+}
+
+interface FreeRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const BOX_EPS = 1e-6;
+
+function subtractFree(free: FreeRect[], ux: number, uy: number, uw: number, uh: number): FreeRect[] {
+  const out: FreeRect[] = [];
+  for (const f of free) {
+    if (ux >= f.x + f.w - BOX_EPS || ux + uw <= f.x + BOX_EPS ||
+        uy >= f.y + f.h - BOX_EPS || uy + uh <= f.y + BOX_EPS) {
+      out.push(f);
+      continue;
+    }
+    if (ux > f.x) out.push({ x: f.x, y: f.y, w: ux - f.x, h: f.h });
+    if (ux + uw < f.x + f.w) out.push({ x: ux + uw, y: f.y, w: f.x + f.w - (ux + uw), h: f.h });
+    if (uy > f.y) out.push({ x: f.x, y: f.y, w: f.w, h: uy - f.y });
+    if (uy + uh < f.y + f.h) out.push({ x: f.x, y: uy + uh, w: f.w, h: f.y + f.h - (uy + uh) });
+  }
+  const kept: FreeRect[] = [];
+  for (let i = 0; i < out.length; i++) {
+    const a = out[i];
+    if (a.w <= BOX_EPS || a.h <= BOX_EPS) continue;
+    let contained = false;
+    for (let j = 0; j < out.length; j++) {
+      if (i === j) continue;
+      const b = out[j];
+      if (a.x >= b.x - BOX_EPS && a.y >= b.y - BOX_EPS &&
+          a.x + a.w <= b.x + b.w + BOX_EPS && a.y + a.h <= b.y + b.h + BOX_EPS) {
+        contained = true;
+        break;
+      }
+    }
+    if (!contained) kept.push(a);
+  }
+  return kept;
+}
+
+function boxRotations(contours: Contour[], angles: number[]): BoxRot[] {
+  const out: BoxRot[] = [];
+  const b = contoursBounds(contours);
+  for (const angle of angles) {
+    if (Math.abs(angle % 360) < 1e-6) {
+      out.push({ angle, w: b.w, h: b.h });
+      continue;
+    }
+    const rc = rotateContours(contours, angle, b.x + b.w / 2, b.y + b.h / 2);
+    const rb = contoursBounds(rc);
+    out.push({ angle, w: rb.w, h: rb.h });
+  }
+  return out;
+}
+
+/** MaxRects de cajas: rápido, exacto con 0 separación y sin solapes. */
+function packBoxes(
+  instances: Instance[],
+  rotations: BoxRot[][],
+  sheetW: number,
+  sheetH: number,
+  gap: number,
+  sheetsAllowed: number,
+): BoxResult {
+  const pages: FreeRect[][] = [];
+  const placements: BoxPlacement[] = [];
+  let unplaced = 0;
+  let usedArea = 0;
+  const maxPage = (): number => (pages.length ? Math.max(1, pages.length) : 1);
+  const open = (): FreeRect[] => {
+    const page: FreeRect[] = [{ x: 0, y: 0, w: sheetW, h: sheetH }];
+    pages.push(page);
+    return page;
+  };
+  if (!pages.length) open();
+
+  for (const inst of instances) {
+    const rots = rotations[inst.partIndex] || [];
+    if (!rots.length) {
+      unplaced += inst.copies;
+      continue;
+    }
+    for (let copy = 0; copy < inst.copies; copy++) {
+      let best: { page: number; rot: BoxRot; x: number; y: number; score: [number, number, number, number] } | null = null;
+      for (let p = 0; p < pages.length; p++) {
+        const free = pages[p];
+        for (const rot of rots) {
+          const iw = rot.w + gap;
+          const ih = rot.h + gap;
+          if (iw > sheetW + BOX_EPS || ih > sheetH + BOX_EPS) continue;
+          for (const f of free) {
+            if (f.w + BOX_EPS < iw || f.h + BOX_EPS < ih) continue;
+            const slackX = f.w - iw;
+            const slackY = f.h - ih;
+            const score: [number, number, number, number] = [Math.min(slackX, slackY), f.w * f.h, f.y, f.x];
+            if (!best || score < best.score) best = { page: p, rot, x: f.x, y: f.y, score };
+          }
+        }
+      }
+      if (!best && pages.length < sheetsAllowed) {
+        const free = open();
+        const p = pages.length - 1;
+        for (const rot of rots) {
+          const iw = rot.w + gap;
+          const ih = rot.h + gap;
+          if (iw > sheetW + BOX_EPS || ih > sheetH + BOX_EPS) continue;
+          for (const f of free) {
+            if (f.w + BOX_EPS < iw || f.h + BOX_EPS < ih) continue;
+            const score: [number, number, number, number] = [Math.min(f.w - iw, f.h - ih), f.w * f.h, f.y, f.x];
+            if (!best || score < best.score) best = { page: p, rot, x: f.x, y: f.y, score };
+          }
+        }
+      }
+      if (!best) {
+        unplaced++;
+        continue;
+      }
+      const iw = best.rot.w + gap;
+      const ih = best.rot.h + gap;
+      pages[best.page] = subtractFree(pages[best.page], best.x, best.y, iw, ih);
+      placements.push({
+        partIndex: inst.partIndex,
+        page: best.page,
+        x: best.x,
+        y: best.y,
+        angle: best.rot.angle,
+        area: inst.area,
+      });
+      usedArea += inst.area;
+    }
+  }
+
+  // Páginas vacías fuera.
+  while (pages.length > 1) {
+    const last = pages.length - 1;
+    if (placements.some((p) => p.page === last)) break;
+    pages.pop();
+  }
+  const pagesUsed = Math.max(1, pages.length);
+  let bboxArea = 0;
+  for (let p = 0; p < pagesUsed; p++) {
+    let maxX = 0;
+    let maxY = 0;
+    for (const pl of placements) {
+      if (pl.page !== p) continue;
+      maxX = Math.max(maxX, pl.x + (rotations[pl.partIndex]?.find((r) => r.angle === pl.angle)?.w || 0));
+      maxY = Math.max(maxY, pl.y + (rotations[pl.partIndex]?.find((r) => r.angle === pl.angle)?.h || 0));
+    }
+    bboxArea += maxX * maxY;
+  }
+  return { placements, pages: pagesUsed, unplaced, usedArea, bboxArea };
+}
+
 interface GridSheet {
   cells: Uint16Array;
   gw: number;
@@ -724,6 +901,20 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
     });
   }
 
+  // Alternativa por cajas (MaxRects). Es exacta con separación 0 y sirve de
+  // red de seguridad para piezas rectangulares o muy grandes que la rejilla
+  // no puede representar sin inventarse un hueco.
+  const boxCache: BoxRot[][] = [];
+  if (!options.pinned.length) {
+    const boxAngles = normalAngles;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (!p.contours.length || p.width <= 0 || p.height <= 0 || p.copies <= 0) continue;
+      const angles = p.angles && p.angles.length ? p.angles : boxAngles;
+      boxCache[i] = boxRotations(p.contours, angles);
+    }
+  }
+
   // fijadas: se rasterizan una vez y se marcan en su plancha
   const pinned: PinnedRaster[] = [];
   let pinnedArea = 0;
@@ -811,36 +1002,84 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   }
   bestRun = guardVectorOverlaps(bestRun, pinned, sheet.margin, cell);
 
-  const placed: Omit<Placement, "id" | "pinned">[] = [];
-  for (const p of bestRun.placements) {
-    placed.push({
-      partId: parts[p.partIndex].partId,
-      page: p.sheet,
-      x: Math.round((sheet.margin + p.gx * cell) * 100) / 100,
-      y: Math.round((sheet.margin + p.gy * cell) * 100) / 100,
-      angle: p.angle,
-      mirror: false,
-    });
+  let boxBest: BoxResult | null = null;
+  if (!options.pinned.length && boxCache.some((r) => r && r.length)) {
+    const gap = sheet.spacing + sheet.kerf;
+    const rand = mulberry32(0x7b0c0de);
+    for (let kind = 0; kind < 5; kind++) {
+      const ordered = ordering(instances, kind, rand);
+      const candidate = packBoxes(ordered, boxCache, usableW, usableH, gap, sheetsAllowed);
+      if (
+        !boxBest ||
+        candidate.unplaced < boxBest.unplaced ||
+        (candidate.unplaced === boxBest.unplaced && candidate.pages < boxBest.pages)
+      ) {
+        boxBest = candidate;
+      }
+    }
   }
-  for (const pin of options.pinned) {
-    placed.push({
-      partId: pin.partId,
-      page: pin.page,
-      x: pin.x,
-      y: pin.y,
-      angle: pin.angle,
-      mirror: pin.mirror,
-    });
+  const shapePages = Math.max(1, bestRun.sheets);
+  let shapeBoxArea = 0;
+  for (let page = 0; page < shapePages; page++) {
+    let maxX = 0;
+    let maxY = 0;
+    for (const p of bestRun.placements) {
+      if (p.sheet !== page) continue;
+      maxX = Math.max(maxX, sheet.margin + p.gx * cell + p.rot.width);
+      maxY = Math.max(maxY, sheet.margin + p.gy * cell + p.rot.height);
+    }
+    shapeBoxArea += maxX * maxY;
+  }
+  const useBox = !!boxBest && (
+    boxBest.unplaced < bestRun.unplaced ||
+    (boxBest.unplaced === bestRun.unplaced && boxBest.pages < shapePages) ||
+    (boxBest.unplaced === bestRun.unplaced && boxBest.pages === shapePages && boxBest.bboxArea < shapeBoxArea - 0.5)
+  );
+
+  const placed: Omit<Placement, "id" | "pinned">[] = [];
+  if (useBox && boxBest) {
+    for (const p of boxBest.placements) {
+      placed.push({
+        partId: parts[p.partIndex].partId,
+        page: p.page,
+        x: Math.round((sheet.margin + p.x) * 100) / 100,
+        y: Math.round((sheet.margin + p.y) * 100) / 100,
+        angle: p.angle,
+        mirror: false,
+      });
+    }
+  } else {
+    for (const p of bestRun.placements) {
+      placed.push({
+        partId: parts[p.partIndex].partId,
+        page: p.sheet,
+        x: Math.round((sheet.margin + p.gx * cell) * 100) / 100,
+        y: Math.round((sheet.margin + p.gy * cell) * 100) / 100,
+        angle: p.angle,
+        mirror: false,
+      });
+    }
+    for (const pin of options.pinned) {
+      placed.push({
+        partId: pin.partId,
+        page: pin.page,
+        x: pin.x,
+        y: pin.y,
+        angle: pin.angle,
+        mirror: pin.mirror,
+      });
+    }
   }
 
   const pages = Math.max(1, ...placed.map((p) => p.page + 1));
   const usableArea = usableW * usableH * pages;
+  const usedArea = useBox && boxBest ? boxBest.usedArea : bestRun.usedArea;
   return {
     placements: placed,
     pages,
-    unplaced: bestRun.unplaced,
-    efficiency: Math.min(1, bestRun.usedArea / Math.max(1e-6, usableArea)),
-    usedArea: bestRun.usedArea,
+    unplaced: useBox && boxBest ? boxBest.unplaced : bestRun.unplaced,
+    efficiency: Math.min(1, usedArea / Math.max(1e-6, usableArea)),
+    usedArea,
     elapsedMs: Date.now() - started,
   };
 }

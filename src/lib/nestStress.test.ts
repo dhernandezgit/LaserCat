@@ -147,11 +147,13 @@ describe("nesting de estrés", () => {
     expect(result.unplaced).toBeGreaterThan(0);
   });
 
-  it("avisa si 100 piezas de 30 mm no caben y no inventa solapes", () => {
+  it("coloca 100 piezas de 30 mm que llenan exactamente la plancha", () => {
     const parts = Array.from({ length: 100 }, (_, i) => rectRequest(`full${i}`, 30, 30));
     const result = run(parts, { quality: "equilibrada", singlePage: true });
-    expect(result.unplaced).toBeGreaterThan(0);
+    expect(result.unplaced).toBe(0);
+    expect(result.placements).toHaveLength(100);
     expect(result.pages).toBe(1);
+    expect(result.efficiency).toBeCloseTo(1, 3);
     assertNoOverlaps(parts, result, "100 de 30 mm");
   });
 

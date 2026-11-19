@@ -157,6 +157,19 @@ export function DesignPanel({
     }
   };
 
+  const setAllCopiesExact = (value: number) => {
+    const copies = Math.max(0, Math.min(999, Math.round(value)));
+    if (!Number.isFinite(copies)) return;
+    if (selectedGroups.length === 1 && selectedGroups[0].members.every((m) => sel.has(m.partId))) {
+      dispatch({ type: "SET_ASSEMBLY_COPIES", id: selectedGroups[0].id, copies: Math.max(1, copies) });
+      return;
+    }
+    for (const id of selection.partIds) {
+      const part = doc.parts.find((p) => p.id === id);
+      if (part && !part.assemblyId) dispatch({ type: "SET_COPIES", id, copies });
+    }
+  };
+
   const setBulkOffset = (mm: number) => {
     const value = Math.max(0, Math.min(20, Math.round(mm * 2) / 2));
     const ids = new Set<string>();
@@ -283,6 +296,23 @@ export function DesignPanel({
               <span>Copias</span>
               <button className="cc-icon" type="button" onClick={() => setAllCopies(-1)}>−</button>
               <button className="cc-icon" type="button" onClick={() => setAllCopies(1)}>+</button>
+              <input
+                className="cc-input"
+                type="number"
+                min={0}
+                max={999}
+                step={1}
+                placeholder="n"
+                aria-label="Número de copias exacto"
+                title="Escribe el número de copias y pulsa Enter"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setAllCopiesExact(Number((e.target as HTMLInputElement).value));
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                onBlur={(e) => setAllCopiesExact(Number(e.target.value))}
+              />
               <span style={{ marginLeft: 6 }}>Borde</span>
               <input
                 className="cc-input"
@@ -409,7 +439,23 @@ export function DesignPanel({
                 <div className="copies-row">
                   <span className="cap">Copias</span>
                   <button className="step" type="button" onClick={() => dispatch({ type: "SET_ASSEMBLY_COPIES", id: group.id, copies: Math.max(1, group.copies - 1) })}>−</button>
-                  <span className="n">{group.copies}</span>
+                  <input
+                    key={`gc-${group.id}-${group.copies}`}
+                    className="n copies-input"
+                    type="number"
+                    min={1}
+                    max={999}
+                    step={1}
+                    defaultValue={group.copies}
+                    aria-label={`Copias de ${group.name}`}
+                    title="Escribe el número de copias y pulsa Enter"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onBlur={(e) => {
+                      const n = Number(e.target.value);
+                      if (Number.isFinite(n)) dispatch({ type: "SET_ASSEMBLY_COPIES", id: group.id, copies: Math.max(1, Math.min(999, Math.round(n))) });
+                    }}
+                  />
                   <button className="step" type="button" onClick={() => dispatch({ type: "SET_ASSEMBLY_COPIES", id: group.id, copies: Math.min(99, group.copies + 1) })}>+</button>
                   <span className="placed">{allPlaced(group)} en plancha</span>
                 </div>
@@ -575,7 +621,23 @@ export function DesignPanel({
                 <div className="copies-row">
                   <span className="cap">Copias</span>
                   <button className="step" type="button" onClick={() => dispatch({ type: "SET_COPIES", id: part.id, copies: Math.max(0, part.copies - 1) })}>−</button>
-                  <span className="n">{part.copies}</span>
+                  <input
+                    key={`pc-${part.id}-${part.copies}`}
+                    className="n copies-input"
+                    type="number"
+                    min={0}
+                    max={999}
+                    step={1}
+                    defaultValue={part.copies}
+                    aria-label={`Copias de ${part.name}`}
+                    title="Escribe el número de copias y pulsa Enter"
+                    onFocus={(e) => e.currentTarget.select()}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    onBlur={(e) => {
+                      const n = Number(e.target.value);
+                      if (Number.isFinite(n)) dispatch({ type: "SET_COPIES", id: part.id, copies: Math.max(0, Math.min(999, Math.round(n))) });
+                    }}
+                  />
                   <button className="step" type="button" onClick={() => dispatch({ type: "SET_COPIES", id: part.id, copies: Math.min(999, part.copies + 1) })}>+</button>
                   <span className="placed">{count}/{part.copies} en plancha</span>
                 </div>
