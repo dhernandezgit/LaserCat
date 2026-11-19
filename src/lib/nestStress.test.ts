@@ -187,6 +187,30 @@ describe("nesting de estrés", () => {
     assertNoOverlaps(boxes, result, "modo rectángulos");
   });
 
+  it("rellena el hueco interior de un anillo antes de ocupar el exterior", () => {
+    const parts: NestRequestPart[] = [
+      {
+        partId: "ring",
+        copies: 1,
+        contours: [rectContour(0, 0, 120, 120), rectContour(30, 30, 60, 60).reverse()],
+        width: 120,
+        height: 120,
+      },
+      rectRequest("inside", 50, 50),
+      rectRequest("small1", 20, 20),
+      rectRequest("small2", 20, 20),
+    ];
+    const result = run(parts, { quality: "rapida" });
+    expect(result.unplaced).toBe(0);
+    const inner = result.placements.find((p) => p.partId === "inside");
+    expect(inner).toBeDefined();
+    expect(inner!.x).toBeGreaterThan(20);
+    expect(inner!.y).toBeGreaterThan(20);
+    expect(inner!.x + 50).toBeLessThan(100);
+    expect(inner!.y + 50).toBeLessThan(100);
+    assertNoOverlaps(parts, result, "anillo relleno");
+  });
+
   it("detecta y evita solapes en vectores finos e inclinados", () => {
     const parts: NestRequestPart[] = [];
     for (let i = 0; i < 18; i++) {

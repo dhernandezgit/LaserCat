@@ -31,8 +31,8 @@ const QUALITY_BUDGET: Record<Quality, number> = {
 
 const QUALITY_RUNS: Record<Quality, number> = {
   rapida: 1,
-  equilibrada: 3,
-  maxima: 4,
+  equilibrada: 4,
+  maxima: 6,
 };
 
 interface RotShape {
@@ -295,6 +295,7 @@ function placeRun(
   const sheets: GridSheet[] = [];
   const placements: RunPlacement[] = [];
   let unplaced = 0;
+  const failed: number[] = [];
   let usedArea = pinnedArea;
 
   const ensureSheet = (index: number): GridSheet => {
@@ -350,6 +351,94 @@ function placeRun(
   }
 
   /**
+   * Detecta huecos cerrados (por ejemplo el interior de un anillo o una U).
+   * Son las zonas libres que no se alcanzan desde el borde de la plancha.
+   */
+  const findHoles = (sheet: GridSheet): { x0: number; y0: number; x1: number; y1: number; size: number }[] => {
+    const { gw: w, gh: h, cells } = sheet;
+    const seen = new Uint8Array(w * h);
+    const queue: number[] = [];
+    const push = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= w || y >= h) return;
+      const i = y * w + x;
+      if (seen[i] || cells[i]) return;
+      seen[i] = 1;
+      queue.push(i);
+    };
+    for (let x = 0; x < w; x++) {
+      push(x, 0);
+      push(x, h - 1);
+    }
+    for (let y = 1; y < h - 1; y++) {
+      push(0, y);
+      push(w - 1, y);
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const i = queue[head];
+      const x = i % w;
+      const y = (i / w) | 0;
+      push(x - 1, y);
+      push(x + 1, y);
+      push(x, y - 1);
+      push(x, y + 1);
+    }
+
+    const holes: { x0: number; y0: number; x1: number; y1: number; size: number }[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] || seen[i]) continue;
+      const start = i;
+      let qh = 0;
+      const q: number[] = [start];
+      seen[start] = 1;
+      let x0 = w, y0 = h, x1 = -1, y1 = -1;
+      while (qh < q.length) {
+        const j = q[qh++];
+        const x = j % w;
+        const y = (j / w) | 0;
+        x0 = Math.min(x0, x);
+        y0 = Math.min(y0, y);
+        x1 = Math.max(x1, x);
+        y1 = Math.max(y1, y);
+        const around = [j - 1, j + 1, j - w, j + w];
+        for (const n of around) {
+          if (n < 0 || n >= cells.length) continue;
+          if (seen[n] || cells[n]) continue;
+          const nx = n % w;
+          if (Math.abs(nx - x) > 1) continue;
+          seen[n] = 1;
+          q.push(n);
+        }
+      }
+      holes.push({ x0, y0, x1, y1, size: q.length });
+    }
+    holes.sort((a, b) => a.size - b.size);
+    return holes;
+  };
+
+  /** Intenta meter una pieza en un hueco cerrado antes de abrir sitio nuevo. */
+  const findHoleSpot = (sheet: GridSheet, rots: RotShape[], deadline: number): { rot: RotShape; sx: number; sy: number } | null => {
+    if (Date.now() > deadline) return null;
+    const holes = findHoles(sheet);
+    if (!holes.length) return null;
+    for (const hole of holes) {
+      for (const rot of rots) {
+        if (Date.now() > deadline) return null;
+        const minX = hole.x0 - rot.pad;
+        const maxX = hole.x1 - rot.pad - rot.gridW + 1;
+        const minY = hole.y0 - rot.pad;
+        const maxY = hole.y1 - rot.pad - rot.gridH + 1;
+        if (minX > maxX || minY > maxY) continue;
+        for (let sy = minY; sy <= maxY; sy++) {
+          for (let sx = minX; sx <= maxX; sx++) {
+            if (fits(sheet, rot, sx, sy)) return { rot, sx, sy };
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  /**
    * Busca el mejor hueco probando TODAS las rotaciones, no la primera que
    * quepa. Antes, el ángulo 0 casi siempre encontraba un sitio y los demás
    * ángulos nunca se usaban; por eso el aprovechamiento era pobre.
@@ -392,7 +481,7 @@ function placeRun(
     for (let copy = 0; copy < inst.copies; copy++) {
       let placed = false;
       for (let s = 0; s < sheets.length; s++) {
-        const spot = findSpot(sheets[s], rots, budgetEnd);
+        const spot = findHoleSpot(sheets[s], rots, budgetEnd) || findSpot(sheets[s], rots, budgetEnd);
         if (spot) {
           mark(sheets[s], spot.rot, spot.sx, spot.sy);
           placements.push({
@@ -427,7 +516,7 @@ function placeRun(
           sheets.pop();
         }
       }
-      if (!placed) unplaced++;
+      if (!placed) failed.push(inst.partIndex);
     }
   }
 
@@ -492,6 +581,69 @@ function placeRun(
       }
     }
   }
+  // Segunda oportunidad: tras compactar, los huecos que han quedado libres
+  // se prueban otra vez, empezando por las piezas más pequeñas.
+  if (failed.length) {
+    failed.sort((a, b) => (instances.find((i) => i.partIndex === a)?.area || 0) - (instances.find((i) => i.partIndex === b)?.area || 0));
+    const still: number[] = [];
+    for (const partIndex of failed) {
+      if (Date.now() > budgetEnd) {
+        still.push(partIndex);
+        continue;
+      }
+      const rots = rotations[partIndex] || [];
+      let placedAgain = false;
+      for (let s = 0; s < sheets.length && !placedAgain; s++) {
+        const spot = findHoleSpot(sheets[s], rots, budgetEnd) || findSpot(sheets[s], rots, budgetEnd);
+        if (!spot) continue;
+        mark(sheets[s], spot.rot, spot.sx, spot.sy);
+        placements.push({
+          partIndex,
+          angle: spot.rot.angle,
+          gx: spot.sx + spot.rot.pad,
+          gy: spot.sy + spot.rot.pad,
+          sheet: s,
+          rot: spot.rot,
+        });
+        usedArea += spot.rot.area;
+        placedAgain = true;
+      }
+      if (!placedAgain) still.push(partIndex);
+    }
+    unplaced = still.length;
+  } else {
+    unplaced = 0;
+  }
+
+  // Mueve piezas ya colocadas que hayan quedado fuera hacia huecos cerrados
+  // que hayan quedado vacíos (por ejemplo, el interior de un anillo).
+  if (Date.now() < budgetEnd) {
+    for (let s = 0; s < sheets.length && Date.now() < budgetEnd; s++) {
+      const sheet = sheets[s];
+      const holes = findHoles(sheet);
+      if (!holes.length) continue;
+      const list = placements.filter((p) => p.sheet === s).sort((a, b) => a.rot.area - b.rot.area);
+      for (const p of list) {
+        if (Date.now() > budgetEnd) break;
+        const oldX = p.gx;
+        const oldY = p.gy;
+        const oldRot = p.rot;
+        unmark(sheet, oldRot, oldX - oldRot.pad, oldY - oldRot.pad);
+        const spot = findHoleSpot(sheet, rotations[p.partIndex] || [], budgetEnd);
+        const same = spot && spot.rot.angle === oldRot.angle && spot.sx + spot.rot.pad === oldX && spot.sy + spot.rot.pad === oldY;
+        if (spot && !same) {
+          mark(sheet, spot.rot, spot.sx, spot.sy);
+          p.angle = spot.rot.angle;
+          p.gx = spot.sx + spot.rot.pad;
+          p.gy = spot.sy + spot.rot.pad;
+          p.rot = spot.rot;
+        } else {
+          mark(sheet, oldRot, oldX - oldRot.pad, oldY - oldRot.pad);
+        }
+      }
+    }
+  }
+
   const usable = sheetW * sheetH;
   const efficiency = pages > 0 ? usedArea / (usable * pages) : 0;
   let bboxArea = 0;
