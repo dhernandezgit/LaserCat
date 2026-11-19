@@ -148,26 +148,28 @@ export function DesignPanel({
   const setAllCopies = (delta: number) => {
     if (selectedGroups.length === 1 && selectedGroups[0].members.every((m) => sel.has(m.partId))) {
       const g = selectedGroups[0];
-      dispatch({ type: "SET_ASSEMBLY_COPIES", id: g.id, copies: Math.max(1, g.copies + delta) });
+      dispatch({ type: "SET_MANY_COPIES", groups: [{ id: g.id, copies: Math.max(1, g.copies + delta) }] });
       return;
     }
-    for (const id of selection.partIds) {
-      const part = doc.parts.find((p) => p.id === id);
-      if (part && !part.assemblyId) dispatch({ type: "SET_COPIES", id, copies: Math.max(0, part.copies + delta) });
-    }
+    const updates = selection.partIds
+      .map((id) => doc.parts.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p && !p.assemblyId)
+      .map((p) => ({ id: p.id, copies: Math.max(0, p.copies + delta) }));
+    if (updates.length) dispatch({ type: "SET_MANY_COPIES", parts: updates });
   };
 
   const setAllCopiesExact = (value: number) => {
     const copies = Math.max(0, Math.min(999, Math.round(value)));
     if (!Number.isFinite(copies)) return;
     if (selectedGroups.length === 1 && selectedGroups[0].members.every((m) => sel.has(m.partId))) {
-      dispatch({ type: "SET_ASSEMBLY_COPIES", id: selectedGroups[0].id, copies: Math.max(1, copies) });
+      dispatch({ type: "SET_MANY_COPIES", groups: [{ id: selectedGroups[0].id, copies: Math.max(1, copies) }] });
       return;
     }
-    for (const id of selection.partIds) {
-      const part = doc.parts.find((p) => p.id === id);
-      if (part && !part.assemblyId) dispatch({ type: "SET_COPIES", id, copies });
-    }
+    const updates = selection.partIds
+      .map((id) => doc.parts.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p && !p.assemblyId)
+      .map((p) => ({ id: p.id, copies }));
+    if (updates.length) dispatch({ type: "SET_MANY_COPIES", parts: updates });
   };
 
   const setBulkOffset = (mm: number) => {

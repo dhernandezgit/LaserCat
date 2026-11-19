@@ -100,6 +100,7 @@ export type Action =
   | { type: "RESIZE_ASSEMBLY"; id: string; width: number; height: number; nest?: boolean }
   | { type: "REMOVE_PARTS"; ids: string[] }
   | { type: "SET_COPIES"; id: string; copies: number }
+  | { type: "SET_MANY_COPIES"; parts?: { id: string; copies: number }[]; groups?: { id: string; copies: number }[] }
   | { type: "NEST" }
   | { type: "MOVE_PLACEMENT"; id: string; x: number; y: number }
   | { type: "SET_POSITIONS"; positions: { id: string; x: number; y: number }[]; key?: string }
@@ -645,6 +646,17 @@ export function reducer(state: AppState, action: Action): AppState {
         .filter((p) => !ids.has(p.partId))
         .map((p) => (p.assemblyId && !validGroup.has(p.assemblyId) ? { ...p, assemblyId: undefined, pinned: false } : p));
       return autoNestOrKeep(state, { ...state.doc, parts: cleanedParts, placements, groups }, "remove-parts");
+    }
+    case "SET_MANY_COPIES": {
+      const partMap = new Map((action.parts || []).map((p) => [p.id, Math.max(0, Math.min(999, Math.round(p.copies)))]));
+      const groupMap = new Map((action.groups || []).map((g) => [g.id, Math.max(1, Math.min(999, Math.round(g.copies)))]));
+      const parts = state.doc.parts.map((p) => (partMap.has(p.id) ? { ...p, copies: partMap.get(p.id)! } : p));
+      const groups = getGroups(state.doc).map((g) => (groupMap.has(g.id) ? { ...g, copies: groupMap.get(g.id)! } : g));
+      const doc = { ...state.doc, parts, groups };
+      if (!state.doc.settings.autoNest) return withDoc(state, doc, "many-copies");
+      const res = nestDoc(doc);
+      const next = withDoc(state, res.doc, "many-copies");
+      return { ...next, lastNest: res.nest };
     }
     case "SET_COPIES": {
       const copies = Math.max(0, Math.min(999, Math.round(action.copies)));
