@@ -355,7 +355,7 @@ export function SettingsShell({
             <div className="preset-line"><span>{stats.placed} piezas · {stats.pages} plancha{stats.pages === 1 ? "" : "s"}</span><span>{formatDuration(stats.timeSeconds)}</span></div>
             <div className="preset-line"><span>Método</span><span>{methodLabel[sheet.method ?? "auto"]}</span></div>
             <div className="preset-line"><span>Orientaciones usadas</span><span>{angleText}</span></div>
-            <div className="preset-line"><span>Orientaciones disponibles</span><span>{sheet.rotation === "libre" ? "8 (0°–315°)" : sheet.rotation === "90" ? "4 (0°/90°/180°/270°)" : "1 (0°)"}</span></div>
+            <div className="preset-line"><span>Orientaciones disponibles</span><span>{sheet.rotation === "libre" ? "24 pasos de 15° (0°–345°)" : sheet.rotation === "90" ? "4 (0°/90°/180°/270°)" : "1 (0°)"}</span></div>
             <span className="micro-help">El aprovechamiento es la superficie real de las siluetas; los huecos no cuentan.</span>
             {sheet.width > machine.workWidth || sheet.height > machine.workHeight ? (
               <span style={{ color: "var(--danger)" }}>La plancha supera el área de {machine.name}.</span>
@@ -390,7 +390,26 @@ export function SettingsShell({
               </select>
             </div>
           </div>
-          <ToggleLine checked={settings.compact !== false} onChange={(v) => setSettings({ compact: v })} label="Compactar después de colocar" hint="Empuja las piezas hacia arriba e izquierda para ganar aprovechamiento" />
+          <div className="ctl">
+            <label>Objetivo de la colocación</label>
+            <div className="segmented" role="tablist" aria-label="Objetivo de colocación">
+              <button
+                type="button"
+                className={(settings.packStyle ?? "comfortable") === "comfortable" ? "active" : ""}
+                onClick={() => setSettings({ packStyle: "comfortable", compact: false })}
+              >
+                Cómodo
+              </button>
+              <button
+                type="button"
+                className={(settings.packStyle ?? "comfortable") === "compact" ? "active" : ""}
+                onClick={() => setSettings({ packStyle: "compact", compact: true })}
+              >
+                Compacto
+              </button>
+            </div>
+            <span className="hint">Cómodo reparte las piezas por la plancha; Compacto las aprieta para ocupar el mínimo espacio.</span>
+          </div>
           <div className="micro-help">Las figuras con imágenes se mueven y giran como una unidad. Si una no cabe, baja la separación o prueba la calidad Exacta.</div>
           <button type="button" className="cc-btn primary" onClick={onOptimize}>Recalcular ahora</button>
         </Sect>

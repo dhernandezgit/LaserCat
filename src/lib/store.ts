@@ -41,7 +41,8 @@ export const DEFAULT_SETTINGS: DocSettings = {
   expert: false,
   autoNest: true,
   imageDropMode: "cut",
-  compact: true,
+  compact: false,
+  packStyle: "comfortable",
   wood3dDepth: 3,
   exportBridges: false,
   bridgeCount: 4,
@@ -103,6 +104,7 @@ export type Action =
   | { type: "SET_COPIES"; id: string; copies: number }
   | { type: "SET_MANY_COPIES"; parts?: { id: string; copies: number }[]; groups?: { id: string; copies: number }[] }
   | { type: "NEST" }
+  | { type: "APPLY_NEST"; doc: Doc; nest: LastNest }
   | { type: "MOVE_PLACEMENT"; id: string; x: number; y: number }
   | { type: "SET_POSITIONS"; positions: { id: string; x: number; y: number }[]; key?: string }
   | { type: "SET_PLACEMENT"; id: string; patch: Partial<Placement> }
@@ -230,7 +232,7 @@ function puzzleSolutionPlacements(doc: Doc): Placement[] | null {
 }
 
 /** Recoloca todas las piezas no fijadas y devuelve el documento y el aviso. */
-export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
+export function nestDoc(doc: Doc, onProgress?: (value: number) => void): { doc: Doc; nest: LastNest } {
   if (!doc.parts.length) {
     return {
       doc: { ...doc, placements: [], updatedAt: now() },
@@ -239,6 +241,7 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
   }
   const puzzlePlaced = puzzleSolutionPlacements(doc);
   if (puzzlePlaced) {
+    onProgress?.(1);
     const usable = Math.max(1, (doc.sheet.width - doc.sheet.margin * 2) * (doc.sheet.height - doc.sheet.margin * 2));
     const used = doc.parts.reduce((sum, part) => sum + partOuterArea(part), 0);
     return {
@@ -254,6 +257,7 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
   }
   const solved = completeDemoEfficiency(doc);
   if (solved !== null) {
+    onProgress?.(1);
     return {
       doc: { ...doc, updatedAt: now() },
       nest: {
@@ -318,14 +322,17 @@ export function nestDoc(doc: Doc): { doc: Doc; nest: LastNest } {
 
   let result: NestResult;
   try {
+    const packStyle = doc.settings.packStyle ?? (doc.settings.compact === false ? "comfortable" : "comfortable");
     result = nestParts(request, {
       sheet: doc.sheet,
       rotation: doc.sheet.rotation,
       quality: doc.sheet.quality,
       method: doc.sheet.method,
       packMode: doc.sheet.packMode,
-      compact: doc.settings.compact !== false,
+      compact: packStyle === "compact",
+      packStyle,
       pinned,
+      onProgress,
     });
   } catch (err) {
     console.error(err);
@@ -746,6 +753,10 @@ export function reducer(state: AppState, action: Action): AppState {
       const next = withDoc(state, res.doc, "nest");
       return { ...next, lastNest: res.nest };
     }
+    case "APPLY_NEST": {
+      const next = withDoc(state, action.doc, "nest");
+      return { ...next, lastNest: action.nest };
+    }
     case "MOVE_PLACEMENT": {
       const placements = state.doc.placements.map((p) =>
         p.id === action.id
@@ -809,13 +820,8 @@ export function reducer(state: AppState, action: Action): AppState {
       );
     }
     case "PIN_PLACEMENT": {
-      const placement = state.doc.placements.find((p) => p.id === action.id);
-      if (!placement) return state;
-      const ids = placement.assemblyId
-        ? new Set(state.doc.placements.filter((p) => p.assemblyId === placement.assemblyId).map((p) => p.id))
-        : new Set([action.id]);
       const placements = state.doc.placements.map((p) =>
-        ids.has(p.id) ? { ...p, pinned: action.pinned } : p,
+        p.id === action.id ? { ...p, pinned: action.pinned } : p,
       );
       return withDoc(state, { ...state.doc, placements }, `pin-${action.id}`);
     }
@@ -1213,6 +1219,9 @@ export function normalizeDoc(input: any): Doc | null {
     machineId: String(rs.machineId || DEFAULT_SETTINGS.machineId),
     materialId: String(rs.materialId || DEFAULT_SETTINGS.materialId),
   };
+  if (settings.packStyle !== "comfortable" && settings.packStyle !== "compact") {
+    settings.packStyle = "comfortable";
+  }
   const puzzleSolution: PuzzleSolutionEntry[] | undefined = Array.isArray(input.puzzleSolution)
     ? input.puzzleSolution
         .slice(0, 100)

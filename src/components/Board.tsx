@@ -120,9 +120,10 @@ export function Board({
     if (e.button !== 0) return;
     e.stopPropagation();
     const current = selection.placementIds;
-    const groupIds = pl.assemblyId
-      ? doc.placements.filter((p) => p.assemblyId === pl.assemblyId).map((p) => p.id)
-      : [pl.id];
+    // El arrastre mueve siempre la pieza concreta, aunque forme parte de una
+    // figura. Para mover la figura completa se pueden seleccionar sus piezas
+    // o usar las acciones de la tarjeta del grupo.
+    const groupIds = [pl.id];
     let ids: string[];
     if (e.shiftKey) {
       const allSelected = groupIds.every((id) => current.includes(id));
@@ -170,9 +171,8 @@ export function Board({
       /* ignore */
     }
     if (d.moved) {
-      // La pieza movida a mano se queda fijada; el resto se recoloca alrededor.
+      // La pieza movida a mano se queda exactamente donde se ha soltado.
       for (const o of d.origins) dispatch({ type: "PIN_PLACEMENT", id: o.id, pinned: true });
-      if (doc.settings.autoNest) window.setTimeout(() => dispatch({ type: "NEST" }), 30);
     }
     drag.current = null;
     setDragging(false);

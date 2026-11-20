@@ -148,6 +148,8 @@ export interface DocSettings {
   autoNest: boolean;
   imageDropMode?: ImageDropMode;
   compact?: boolean;
+  /** Cómodo reparte las piezas por la plancha; compacto minimiza el hueco. */
+  packStyle?: "comfortable" | "compact";
   wood3dDepth?: number;
   /** Ajustes de exportaciÃ³n. */
   exportBridges: boolean;
@@ -221,8 +223,11 @@ export interface NestOptions {
   /** Forma real o cajas envolventes. */
   packMode?: PackMode;
   compact?: boolean;
+  packStyle?: "comfortable" | "compact";
   /** Marcas de piezas que ya estÃ¡n colocadas y no deben moverse. */
   pinned: Placement[];
+  /** Progreso 0..1 para la barra de estado. */
+  onProgress?: (value: number) => void;
 }
 
 export interface NestRequestPart {

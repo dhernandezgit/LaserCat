@@ -161,6 +161,18 @@ export function ViewerShell({
           <button type="button" className="optimize-btn" onClick={onOptimize} title="Recolocar todas las piezas y figuras">
             ✦ Optimizar ✦
           </button>
+          <button
+            type="button"
+            className={`pack-mode-btn ${(doc.settings.packStyle ?? "comfortable") === "comfortable" ? "comfortable" : "compact"}`}
+            title="Alternar entre repartir cómodamente por la plancha y compactar al mínimo espacio"
+            onClick={() => {
+              const next = (doc.settings.packStyle ?? "comfortable") === "comfortable" ? "compact" : "comfortable";
+              dispatch({ type: "SET_SETTINGS", patch: { packStyle: next } });
+              dispatch({ type: "TOAST", text: next === "comfortable" ? "Modo cómodo. Pulsa Optimizar para repartir." : "Modo compacto. Pulsa Optimizar para apretar las piezas.", kind: "ok" });
+            }}
+          >
+            {((doc.settings.packStyle ?? "comfortable") === "comfortable") ? "Cómodo" : "Compacto"}
+          </button>
         </div>
         <div className="save-row">
           <input

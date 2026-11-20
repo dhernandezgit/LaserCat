@@ -22,6 +22,7 @@ export function StatusShell({
   progress?: number;
 }) {
   const icon = `${import.meta.env.BASE_URL}icon.png`;
+  const pct = Math.round(Math.max(0.05, Math.min(1, progress ?? 0.35)) * 100);
   return (
     <div className="statusbar">
       <div className="brand" title="LaserCat">
@@ -29,10 +30,10 @@ export function StatusShell({
         <span className="nombre">LaserCat</span>
       </div>
       <div className="center">
-        <span className="msg">{busy ? "Optimizando…" : message}</span>
+        <span className="msg">{busy ? `Optimizando… ${pct}%` : message}</span>
         {busy && (
-          <span className="progress" title="Progreso de la optimización">
-            <div style={{ width: `${Math.round(Math.max(0.05, Math.min(1, progress ?? 0.35)) * 100)}%` }} />
+          <span className="progress" title={`Progreso de la optimización: ${pct}%`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+            <div style={{ width: `${pct}%` }} />
           </span>
         )}
       </div>

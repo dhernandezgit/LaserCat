@@ -93,11 +93,6 @@ async function alphaRect(dataUrl: string): Promise<Crop | null> {
   if (maxX < minX || maxY < minY) {
     return { x0: 0, y0: 0, x1: 1, y1: 1, transparent: true };
   }
-  // Un píxel de margen evita comerse el antialiasing del borde.
-  minX = Math.max(0, minX - 1);
-  minY = Math.max(0, minY - 1);
-  maxX = Math.min(sw - 1, maxX + 1);
-  maxY = Math.min(sh - 1, maxY + 1);
   return {
     x0: minX / sw,
     y0: minY / sh,

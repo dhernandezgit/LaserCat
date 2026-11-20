@@ -15,7 +15,7 @@ import type {
   PlacementMethod,
 } from "../types";
 import { clipperArea, intersectContours } from "./clipper";
-import { contoursBounds, rotateContours, translateContours } from "./geom";
+import { contoursBounds, rotateContours, rotatedSize, translateContours } from "./geom";
 
 export const QUALITY_CELL: Record<Quality, number> = {
   rapida: 2,
@@ -24,15 +24,15 @@ export const QUALITY_CELL: Record<Quality, number> = {
 };
 
 const QUALITY_BUDGET: Record<Quality, number> = {
-  rapida: 600,
-  equilibrada: 1800,
-  maxima: 3200,
+  rapida: 2500,
+  equilibrada: 7000,
+  maxima: 12000,
 };
 
 const QUALITY_RUNS: Record<Quality, number> = {
-  rapida: 1,
-  equilibrada: 4,
-  maxima: 6,
+  rapida: 2,
+  equilibrada: 5,
+  maxima: 8,
 };
 
 interface RotShape {
@@ -362,8 +362,8 @@ function normalAnglesFor(mode: RotationMode): number[] {
 function broadAnglesFor(mode: RotationMode): number[] {
   if (mode === "no") return [0];
   if (mode === "90") return [0, 90, 180, 270];
-  // Si los ángulos normales no bastan, probamos también diagonales.
-  return [0, 45, 90, 135, 180, 225, 270, 315];
+  // Cualquier ángulo: pasos de 15°, incluyendo diagonales y cuadrantes.
+  return Array.from({ length: 24 }, (_, i) => i * 15);
 }
 
 interface RunPlacement {
@@ -393,6 +393,7 @@ interface RunResult {
   score: number;
   efficiency: number;
   usedArea: number;
+  bboxArea: number;
 }
 
 /**
@@ -452,6 +453,7 @@ function guardVectorOverlaps(
     score: result.score,
     efficiency: result.efficiency,
     usedArea,
+    bboxArea: result.bboxArea,
   };
 }
 
@@ -840,7 +842,7 @@ function placeRun(
     bboxArea += maxX * maxY;
   }
   const score = unplaced * 1e9 + pages * 1e7 + bboxArea;
-  return { placements, sheets: pages, unplaced, score, efficiency, usedArea };
+  return { placements, sheets: pages, unplaced, score, efficiency, usedArea, bboxArea };
 }
 
 function ordering(instances: Instance[], kind: number, rand: () => number): Instance[] {
@@ -866,6 +868,8 @@ function ordering(instances: Instance[], kind: number, rand: () => number): Inst
  */
 export function nestParts(parts: NestRequestPart[], options: NestOptions): NestResult {
   const started = Date.now();
+  const report = (value: number) => options.onProgress?.(Math.max(0, Math.min(1, value)));
+  report(0.01);
   const { sheet } = options;
   let cell = QUALITY_CELL[options.quality];
   if (parts.length > 120) cell = Math.max(cell, 1.2);
@@ -873,9 +877,17 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const usableH = Math.max(1, sheet.height - sheet.margin * 2);
   const sheetsAllowed = sheet.singlePage ? 1 : 999;
   const budgetEnd = started + QUALITY_BUDGET[options.quality];
+  const comfortable = options.packStyle === "comfortable" || (options.packStyle === undefined && options.compact === false);
+  const totalPartArea = parts.reduce((sum, p) => sum + (p.contours.length ? clipperArea(p.contours) : 0) * p.copies, 0);
+  const fillRatio = totalPartArea / Math.max(1, usableW * usableH);
+  // En trabajos holgados dejamos aire entre piezas; si están apretadas no
+  // añadimos separación artificial que podría dejar cosas fuera.
+  const comfortMm = comfortable && fillRatio < 0.55
+    ? Math.min(8, Math.max(2, Math.min(usableW, usableH) * 0.015))
+    : 0;
   // Al menos una celda de seguridad: la rejilla no debe ser la única barrera
   // entre dos vectores que casi se tocan.
-  const radius = Math.max(1, Math.ceil((sheet.spacing + sheet.kerf) / 2 / cell));
+  const radius = Math.max(1, Math.ceil((sheet.spacing + sheet.kerf + comfortMm) / 2 / cell));
   const normalAngles = normalAnglesFor(options.rotation);
   const broadAngles = broadAnglesFor(options.rotation);
 
@@ -915,6 +927,8 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
     }
   }
 
+  report(0.1);
+
   // fijadas: se rasterizan una vez y se marcan en su plancha
   const pinned: PinnedRaster[] = [];
   let pinnedArea = 0;
@@ -940,7 +954,7 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const runs = QUALITY_RUNS[options.quality];
   const totalBudget = QUALITY_BUDGET[options.quality];
 
-  const runStage = (cache: RotShape[][], deadline: number): RunResult | null => {
+  const runStage = (cache: RotShape[][], deadline: number, base = 0.12, span = 0.4): RunResult | null => {
     let best: RunResult | null = null;
     const rand = mulberry32(0x1a5e4ca7);
     for (let run = 0; run < runs; run++) {
@@ -965,15 +979,17 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
         deadline,
       );
       if (!best || res.score < best.score) best = res;
+      report(base + span * ((run + 1) / runs));
     }
     return best;
   };
 
   // Fase 1: ángulos normales (0/90/180/270). Es la más rápida.
-  let bestRun = runStage(rotationCache, started + totalBudget * (options.rotation === "libre" ? 0.62 : 1));
+  let bestRun = runStage(rotationCache, started + totalBudget * (options.rotation === "libre" ? 0.45 : 1), 0.12, 0.32);
 
-  // Fase 2: si aún queda algo sin colocar, probar diagonales (45/135/225/315).
-  if ((!bestRun || bestRun.unplaced > 0) && options.rotation === "libre" && broadAngles.length > normalAngles.length) {
+  // Fase 2: en modo libre probamos también ángulos intermedios de 15°, no
+  // solo cuando quede algo sin colocar: a veces mejoran el encaje y el bbox.
+  if (options.rotation === "libre" && broadAngles.length > normalAngles.length) {
     const broadCache: RotShape[][] = [];
     for (let i = 0; i < parts.length; i++) {
       const p = parts[i];
@@ -986,8 +1002,14 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       }
       if (rots.length) broadCache[i] = rots;
     }
-    const broad = runStage(broadCache, started + totalBudget);
-    if (broad && (!bestRun || broad.score < bestRun.score)) bestRun = broad;
+    report(0.52);
+    const broad = runStage(broadCache, started + totalBudget, 0.54, 0.4);
+    if (broad) {
+      const sameScore = bestRun && broad.unplaced === bestRun.unplaced && broad.sheets === bestRun.sheets;
+      const preferBroad = !!bestRun && options.rotation === "libre" && sameScore &&
+        (comfortable ? broad.bboxArea <= bestRun.bboxArea * 1.6 : broad.bboxArea <= bestRun.bboxArea);
+      if (!bestRun || broad.score < bestRun.score || preferBroad) bestRun = broad;
+    }
   }
 
   if (!bestRun) {
@@ -998,13 +1020,15 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
       score: Infinity,
       efficiency: 0,
       usedArea: pinnedArea,
+      bboxArea: 0,
     };
   }
+  report(0.94);
   bestRun = guardVectorOverlaps(bestRun, pinned, sheet.margin, cell);
 
   let boxBest: BoxResult | null = null;
   if (!options.pinned.length && boxCache.some((r) => r && r.length)) {
-    const gap = sheet.spacing + sheet.kerf;
+    const gap = sheet.spacing + sheet.kerf + comfortMm;
     const rand = mulberry32(0x7b0c0de);
     for (let kind = 0; kind < 5; kind++) {
       const ordered = ordering(instances, kind, rand);
@@ -1030,10 +1054,11 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
     }
     shapeBoxArea += maxX * maxY;
   }
+  const shapeHasBroad = bestRun.placements.some((p) => Math.abs(p.angle % 90) > 0.01);
   const useBox = !!boxBest && (
     boxBest.unplaced < bestRun.unplaced ||
     (boxBest.unplaced === bestRun.unplaced && boxBest.pages < shapePages) ||
-    (boxBest.unplaced === bestRun.unplaced && boxBest.pages === shapePages && boxBest.bboxArea < shapeBoxArea - 0.5)
+    (!shapeHasBroad && boxBest.unplaced === bestRun.unplaced && boxBest.pages === shapePages && boxBest.bboxArea < shapeBoxArea - 0.5)
   );
 
   const placed: Omit<Placement, "id" | "pinned">[] = [];
@@ -1074,6 +1099,32 @@ export function nestParts(parts: NestRequestPart[], options: NestOptions): NestR
   const pages = Math.max(1, ...placed.map((p) => p.page + 1));
   const usableArea = usableW * usableH * pages;
   const usedArea = useBox && boxBest ? boxBest.usedArea : bestRun.usedArea;
+  if (comfortable && !options.pinned.length && placed.length) {
+    const byPart = new Map(parts.map((part) => [part.partId, part]));
+    const pageShift = new Map<number, { minX: number; minY: number; maxX: number; maxY: number }>();
+    for (const p of placed) {
+      const req = byPart.get(p.partId);
+      if (!req) continue;
+      const size = rotatedSize({ width: req.width, height: req.height }, p.angle);
+      const box = pageShift.get(p.page) || { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      box.minX = Math.min(box.minX, p.x);
+      box.minY = Math.min(box.minY, p.y);
+      box.maxX = Math.max(box.maxX, p.x + size.w);
+      box.maxY = Math.max(box.maxY, p.y + size.h);
+      pageShift.set(p.page, box);
+    }
+    for (const p of placed) {
+      const box = pageShift.get(p.page);
+      if (!box || !Number.isFinite(box.minX)) continue;
+      const dx = sheet.margin + (usableW - (box.maxX - box.minX)) / 2 - box.minX;
+      const dy = sheet.margin + (usableH - (box.maxY - box.minY)) / 2 - box.minY;
+      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+        p.x = Math.round((p.x + dx) * 100) / 100;
+        p.y = Math.round((p.y + dy) * 100) / 100;
+      }
+    }
+  }
+  report(1);
   return {
     placements: placed,
     pages,

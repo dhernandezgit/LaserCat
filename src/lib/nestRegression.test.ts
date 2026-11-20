@@ -39,13 +39,13 @@ describe("regresiones de optimización", () => {
         spacing: 0,
         kerf: 0,
         rotation: "libre",
-        quality: "maxima",
+        quality: "rapida",
         method: "auto",
         packMode: "shape",
         singlePage: true,
       },
       rotation: "libre",
-      quality: "maxima",
+      quality: "rapida",
       method: "auto",
       packMode: "shape",
       compact: true,
@@ -58,13 +58,37 @@ describe("regresiones de optimización", () => {
     );
   });
 
+  it("en modo cómodo usa también ángulos intermedios", () => {
+    const parts = Array.from({ length: 10 }, (_, i) => {
+      const w = 80 + (i % 3) * 10;
+      const h = 60 + (i % 3) * 8;
+      return {
+        partId: `angle-${i}`,
+        copies: 1,
+        contours: [[{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h * 0.3 }, { x: w * 0.3, y: h * 0.3 }, { x: w * 0.3, y: h }, { x: 0, y: h }]],
+        width: w,
+        height: h,
+      };
+    });
+    const result = nestParts(parts, {
+      sheet: {
+        width: 300, height: 300, margin: 0, spacing: 0, kerf: 0,
+        rotation: "libre", quality: "equilibrada", method: "auto", packMode: "shape", singlePage: true,
+      },
+      rotation: "libre", quality: "equilibrada", method: "auto", packMode: "shape",
+      compact: false, packStyle: "comfortable", pinned: [],
+    });
+    expect(result.unplaced).toBe(0);
+    expect(result.placements.some((p) => Math.abs(p.angle % 90) > 0.01)).toBe(true);
+  });
+
   it("respeta offsets reales al calcular el borde de corte", () => {
     const base = createEmptyDoc();
     const parts = [part("a", 140, 140, 5), part("b", 140, 140, 5), part("c", 140, 140, 5), part("d", 140, 140, 5)];
     const doc: Doc = {
       ...base,
       parts,
-      sheet: { ...base.sheet, margin: 0, spacing: 0, kerf: 0, singlePage: true },
+      sheet: { ...base.sheet, margin: 0, spacing: 0, kerf: 0, singlePage: true, quality: "rapida" },
     };
     const res = nestDoc(doc);
     expect(res.nest.unplaced).toBe(0);

@@ -32,6 +32,8 @@ export default function App() {
   const [showGrid, setShowGrid] = useState(true);
   const [theme, setTheme] = useState(() => themeRecorded().key);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const workerRef = useRef<Worker | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [helpSection, setHelpSection] = useState<"inicio" | "svg" | "pegatinas" | "lightburn" | "materiales" | "atajos" | "creditos">("inicio");
@@ -137,13 +139,54 @@ export default function App() {
     dispatch({ type: "TOAST", text: "Proyecto descargado.", kind: "ok" });
   };
 
+  useEffect(() => {
+    if (typeof Worker === "undefined") return;
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL("./lib/nestWorker.ts", import.meta.url), { type: "module" });
+    } catch {
+      return;
+    }
+    workerRef.current = worker;
+    worker.onmessage = (event: MessageEvent) => {
+      const data = event.data as { type: string; value?: number; doc?: Doc; nest?: any; message?: string };
+      if (data.type === "progress") {
+        setProgress(Math.max(0.01, Math.min(0.99, Number(data.value) || 0)));
+      } else if (data.type === "done" && data.doc && data.nest) {
+        setProgress(1);
+        dispatch({ type: "APPLY_NEST", doc: data.doc, nest: data.nest });
+        setBusy(false);
+      } else if (data.type === "error") {
+        setBusy(false);
+        dispatch({ type: "TOAST", text: data.message || "No se pudo optimizar.", kind: "error" });
+      }
+    };
+    worker.onerror = (event) => {
+      setBusy(false);
+      dispatch({ type: "TOAST", text: event.message || "No se pudo optimizar.", kind: "error" });
+    };
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
   const optimize = useCallback(() => {
+    if (busy) return;
     setBusy(true);
+    setProgress(0.02);
+    const worker = workerRef.current;
+    if (worker) {
+      worker.postMessage({ doc });
+      return;
+    }
+    // Fallback para navegadores sin Web Worker.
     window.setTimeout(() => {
       dispatch({ type: "NEST" });
+      setProgress(1);
       setBusy(false);
     }, 40);
-  }, []);
+  }, [busy, doc]);
 
   const onDropFiles = useCallback(async (files: File[]) => {
     if (!files.length) return;
@@ -444,7 +487,7 @@ export default function App() {
         stats={stats}
         message={message}
         busy={busy}
-        progress={0.6}
+        progress={progress}
         onHelp={() => welcome.abrir()}
         onReport={report}
         onSupport={support}

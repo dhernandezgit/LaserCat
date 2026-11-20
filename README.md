@@ -44,12 +44,14 @@ están en la lista y la plancha está vacía hasta que pulsas **Optimizar**.
   con su geometrÃ­a, asÃ­ que una pieza en L puede encajar junto a una silueta hueca.
 - **4 mÃ©todos de colocaciÃ³n** (Greedy/Bottom-Left, Largest First, Voronoi/huecos libres y GenÃ©tico),
   **3 calidades** (RÃ¡pida / Normal / **Exacta**) y **compactaciÃ³n** posterior tipo DeepNest.
-- **RotaciÃ³n** 0Â°/90Â°/ mÃºltiplos/Ã¡ngulo libre, **copias** y **mÃºltiples planchas**. En **forma real** empieza por 0Â°/90Â°/180Â°/270Â° y, si algo no cabe, prueba diagonales de 45Â°; **RectÃ¡ngulos** limita a 90Â° para ir mÃ¡s rÃ¡pido.
+- **Rotación libre real**: 24 pasos de 15° (0°–345°) en forma real, no solo diagonales cuando algo falla; **Rectángulos** limita a 90°.
+- **Dos objetivos**: **Cómodo** (por defecto) reparte y centra las piezas con aire; **Compacto** las aprieta para ocupar el mínimo espacio. Se alternan desde el visor o desde Ajustes.
 - **Kerf** configurable: el corte se compensa hacia el desperdicio para que la pieza final mida lo que debe.
 - **Cero solapes vectoriales**: después de empaquetar se comprueban las siluetas reales con Clipper. La rejilla de colocación lleva una celda de seguridad y cualquier conflicto residual se retira y se avisa como pieza sin colocar.
 - **Relleno de huecos**: después de colocar las piezas grandes se detectan los huecos cerrados (anillos, U, recovecos), se prueban primero ahí las piezas pequeñas y se reintentan las que no cabían tras compactar.
 - **Red de seguridad MaxRects por cajas**: además del empaquetado por silueta, se calcula una colocación exacta de cajas. Si coloca más piezas o menos hojas, se usa esa; así cuatro piezas de 150 mm llenan una plancha de 300 × 300 sin que la rejilla invente separaciones.
 - **Pruebas de estrés**: 120 piezas de 22 mm, 100 piezas de 28 mm, 100 piezas de 30 mm que llenan la plancha exactamente y 100 piezas mixtas (con huecos) en una sola plancha de 300 × 300 mm.
+- **Optimización larga con progreso real**: corre en segundo plano, permite hasta 12 s en Exacta y la barra inferior muestra el avance.
 - **Copias editables**: además de − / +, el número de copias se escribe a mano. Lo mismo ocurre con tamaño, borde, margen, separación, kerf y demás campos numéricos.
 - **Fijar piezas** con el pin (o al arrastrarlas): el resto se recoloca alrededor.
 - Aprovechamiento, nÃºmero de planchas y **tiempo estimado** de corte/grabado en directo.
@@ -81,6 +83,7 @@ están en la lista y la plancha está vacía hasta que pulsas **Optimizar**.
 - Una **figura** es un grupo de piezas que se mueve, gira, fija, duplica y **se anida como una
   unidad**. La imagen grabada y sus cortes mantienen el registro exacto del SVG original.
 - **Agrupar** desde el importador o con `Ctrl` + `G` en el tablero; **Desagrupar** desde la tarjeta de la figura.
+- **Mover piezas individualmente** aunque formen parte de una figura: arrastrar una pieza mueve solo esa pieza; la figura conserva sus miembros y su exportación agrupada.
 - Cada figura tiene **copias independientes**, nombre propio y miembros con su operaciÃ³n
   (cortar / grabar / marcar).
 - El empaquetado **compacta** las figuras despuÃ©s de colocarlas y puede rotarlas si la plancha lo
@@ -313,7 +316,7 @@ Requisitos: **Node.js 20+**.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # 81 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 82 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 npm run typecheck
 npm run build      # dist/ estÃ¡tico
 npm run preview
@@ -350,7 +353,7 @@ docs/                capturas para el README
 ### Tests
 
 ```bash
-npm test           # 81 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
+npm test           # 82 tests (geometría, importador SVG con imágenes, figuras, nesting geométrico, puzzle exacto, estrés vectorial, export, store, tarjeta)
 ```
 
 Cubren, entre otras cosas:

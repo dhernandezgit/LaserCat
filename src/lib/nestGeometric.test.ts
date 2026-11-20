@@ -71,7 +71,7 @@ describe("nesting geométrico", () => {
     expect(result.placements.length).toBe(19);
     expect(result.placements.some((p) => p.angle !== 0)).toBe(true);
     expect(result.efficiency).toBeGreaterThan(0.3);
-    expect(Date.now() - started).toBeLessThan(12000);
+    expect(Date.now() - started).toBeLessThan(30000);
   });
 
   it("no produce solapes entre piezas distintas", () => {

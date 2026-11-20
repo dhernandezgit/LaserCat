@@ -512,6 +512,20 @@ input[type="range"] { accent-color: var(--accent2); }
 }
 .optimize-btn:hover { filter: brightness(1.06); }
 .optimize-btn:disabled { opacity: .55; cursor: default; }
+.pack-mode-btn {
+  flex: none;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--panel2);
+  color: var(--textSoft);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pack-mode-btn:hover { border-color: var(--accent); color: var(--accent3); }
+.pack-mode-btn.comfortable { color: var(--accent3); border-color: var(--accent); }
+.pack-mode-btn.compact { color: var(--accent3); }
 .save-row { display: flex; gap: 6px; align-items: center; }
 .save-row .cc-input { flex: 1; }
 .save-row .cc-btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
