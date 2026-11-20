@@ -12,6 +12,7 @@ import {
   type ImportedPart,
   type SvgImportResult,
 } from "../lib/svgImport";
+import { trimSvgImages } from "../lib/svgImageTrim";
 import { pickFiles, readFileText } from "../lib/download";
 import { uid } from "../lib/demo";
 import { contoursBounds, boundsOf, fmt } from "../lib/geom";
@@ -117,9 +118,17 @@ export function SvgImportDialog({
   // Reimportar al cambiar las opciones (con un pequeño retardo).
   useEffect(() => {
     if (!open || !svgText) return;
-    const t = setTimeout(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
       try {
-        const res = importSvg(svgText, {
+        let prepared = svgText;
+        try {
+          prepared = await trimSvgImages(svgText);
+        } catch {
+          /* si el navegador no puede decodificar, se importa el SVG original */
+        }
+        if (cancelled) return;
+        const res = importSvg(prepared, {
           tolerance: options.tolerance,
           mode: options.mode,
           targetWidth: options.scaleMode === "width" ? Math.max(1, options.scaleValue) : undefined,
@@ -176,7 +185,10 @@ export function SvgImportDialog({
         setEditable([]);
       }
     }, 180);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [open, svgText, options]);
 
   const included = editable.filter((p) => p.include);

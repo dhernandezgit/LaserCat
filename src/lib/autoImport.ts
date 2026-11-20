@@ -2,6 +2,7 @@
 
 import type { Assembly, ImageDropMode, Part } from "../types";
 import { importSvg, type SvgImportResult } from "./svgImport";
+import { trimSvgImages } from "./svgImageTrim";
 import { normalizeOrigin, contoursBounds } from "./geom";
 import { loadImageData, traceImage, imageDataToDataUrl } from "./trace";
 import { uid } from "./demo";
@@ -82,7 +83,8 @@ export function partsFromSvgResult(result: SvgImportResult): ImportPayload {
 
 export async function svgFileToParts(file: File): Promise<ImportPayload> {
   const text = await readFileText(file);
-  const result = importSvg(text, {
+  const prepared = await trimSvgImages(text);
+  const result = importSvg(prepared, {
     tolerance: 1,
     mode: "inteligente",
     strokeMode: "cut",

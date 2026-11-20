@@ -62,6 +62,8 @@ están en la lista y la plancha está vacía hasta que pulsas **Optimizar**.
 - **ImÃ¡genes SVG incrustadas** (`<image>` con data URL): se importan como **grabado** y sirven de
   ancla para agrupar los cortes que las rodean; una imagen grande se convierte en una figura que
   engloba sus piezas.
+- **Recorte automático de transparencia**: si la imagen tiene un borde transparente, se recorta y se
+  recalculan su tamaño, posición y grupo; si es totalmente transparente, se descarta.
 - **SeparaciÃ³n inteligente en islas**: un solo `<path>` con 40 iconos se convierte en 40 piezas;
   los ojos, letras y ventanas interiores se mantienen como **agujeros**, no como piezas sueltas.
 - **Grupos de Inkscape/Illustrator** respetados como pistas, con nombres de capa.
